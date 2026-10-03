@@ -307,7 +307,14 @@ hideEditPost: false
 - **`/categories` 分类页**（`src/pages/categories.astro`）：分类卡片墙（轨道光点动画 + 悬停辉光，仿 liushen）+ 各分类文章列表 + 锚点跳转
 - **`/projects` 项目页**（`src/pages/projects.astro`）：6 个项目卡片（封面图补全 mingcy.cn 前缀、访问/源码链接）
 - **`/tools` 工具页**（`src/pages/tools.astro`）：39 个在线工具按标签分组展示
-- **`/links/fcircle` 友圈页重构**：仿清羽站自定义 `.fc-*` 设计（随机文章卡+换一换、统计栏、响应式卡片墙 1/2/3/4 列、卡片悬停径向光效、作者弹窗与最近文章、加载更多），数据源 `fc.mingcy.cn/all.json`
+- **`/links/fcircle` 友圈页**：使用 `public/fclite/` 内的 **FCLite 插件**（`fclite.js` + `fclite.css` 本地化）渲染动态流——随机文章卡（换一换）、统计栏（订阅/活跃/文章/失败）、响应式卡片墙、作者弹窗（最近文章）、加载更多
+
+#### 3.1 友圈加载优化（预填插件缓存）
+
+- 构建时服务端预取 `fc.mingcy.cn/all.json` → 内联 `#fc-preload` JSON
+- 客户端将内联数据**预填到 FCLite 插件的 localStorage 缓存**（`friend-circle-lite-cache`，10 分钟有效期）→ **首屏零等待渲染**，缓存到期后插件自动重新拉取更新
+- 构建失败/无内联数据时回退客户端 fetch（插件自带逻辑）
+- 插件 CSS 变量映射站点主题（accent/foreground/border，明暗通吃）；保留友链状态区（`status.json` 正常/异常 + 卡片网格）
 
 #### 4. 文章数据迁移
 
@@ -335,11 +342,20 @@ hideEditPost: false
 
 - **移动端默认隐藏头图**：文章详情 `.post-cover` 与列表卡片 `.card-cover-wrapper` 在 `max-width: 640px` 隐藏
 
-#### 8. 友圈加载优化
+#### 8. 仓库与部署
 
-- 构建时服务端预取 `fc.mingcy.cn/all.json` → 内联 `#fc-preload` JSON → 客户端**零等待渲染** + 后台静默刷新对比；构建失败回退客户端 fetch
+- **移除 ai-summaries**：删除 `scripts/gen-ai-summaries.mjs` 与 `src/data/ai-summaries.json`（无任何代码引用），build 脚本简化为 `astro check && astro build && pagefind --site dist && cp -r dist/pagefind public/`，**修复 CI 构建失败**（原引用的脚本文件缺失导致 `MODULE_NOT_FOUND`）
+- README 全部翻译为简体中文
 
 #### 9. 构建说明
 
 - 图片放入内容集合后 Astro 会为每张 markdown 图片生成多尺寸 srcset（约 2264 个优化输出），完整构建约 10 分钟（与旧站 gyoza 结构一致，CI 部署可接受）
 - `astro check` 0 错误；迁移脚本：`migrate-images.mjs`（图片入夹）、`restore-covers.mjs`（ogImage 恢复）、`add-categories.mjs`（分类）、`migrate-posts.mjs`（旧站全量迁移）
+
+#### 10. 性能优化
+
+- **favicon.svg**：3.33 MB → **438 B**（原为 VTracer 位图转矢量，满篇冗余路径；重做为简洁矢量 M + 圆点，呼应 Ming{·}CY logo）
+- **apple-touch-icon**：2.5 MB × 2 → **50 KB × 2**（sharp 裁切缩放至 180×180，iOS 标准尺寸）
+- **Fancybox 189 KB + HeoLivePhoto 11 KB 按需懒加载**：`Layout.astro` 不再全局注入，改为 `live-gallery.ts` 的 `ensureFancybox()` / `ensureHeoLivePhoto()` 运行时检测——仅当页面存在 `[data-fancybox]` 或 `img[data-live-pvt]` 等元素时才注入 CSS + JS，其他页面零开销
+- **背景卡顿优化**：全局背景大图 `filter: blur(24px)` 是主要卡顿源——移动端降至 **12px**，滚动期间进一步降至 **8px**，并同步将 header / 抽屉 / 侧边栏的 `backdrop-filter` 减薄至 6px（`body.is-scrolling` 状态驱动，120ms 防抖）
+- **搜索脚本说明**：`SearchModal.astro…lang.js` 仅 **2.8 KB**、`preload-helper…js` 仅 **1.25 KB**，本身极小；真正的大块 **Pagefind UI 94 KB**（`ui-core…js`）是打开搜索弹层时才加载的动态 chunk，不影响首屏

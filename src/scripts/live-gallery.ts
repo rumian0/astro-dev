@@ -485,10 +485,49 @@ function setupLiveScan() {
   });
 }
 
+/* ---- 按需懒加载（无灯箱/livephoto 元素的页面完全跳过 189KB fancybox）---- */
+function ensureStylesheet(href: string): void {
+  if (document.querySelector("link[href='" + href + "']")) return;
+  const l = document.createElement("link");
+  l.rel = "stylesheet";
+  l.href = href;
+  document.head.appendChild(l);
+}
+
+function ensureScript(src: string, onload: () => void): void {
+  if (document.querySelector("script[src='" + src + "']")) {
+    setTimeout(onload, 0);
+    return;
+  }
+  const s = document.createElement("script");
+  s.src = src;
+  s.onload = onload;
+  document.head.appendChild(s);
+}
+
+function ensureFancybox(): void {
+  if (!document.querySelector("[data-fancybox]")) return;
+  if (typeof (window as any).Fancybox !== "undefined") {
+    setTimeout(initFancybox, 200);
+    return;
+  }
+  ensureStylesheet("/fancybox/fancybox.min.css");
+  ensureScript("/fancybox/fancybox.umd.min.js", initFancybox);
+}
+
+function ensureHeoLivePhoto(): void {
+  if (!document.querySelector("img[data-live-pvt], img[data-live-motion], img[data-live-video]")) return;
+  if (typeof (window as any).HeoLivePhoto !== "undefined") {
+    setTimeout(setupLiveScan, 200);
+    return;
+  }
+  ensureScript("/livephoto/heolivephoto.js", setupLiveScan);
+}
+
 /* ---- bootstrap (runs once on first load; astro:page-load drives re-init) ---- */
-function onPageLoad() {
-  setTimeout(initFancybox, 200);
-  setTimeout(setupLiveScan, 200);
+function onPageLoad(): void {
+  setTimeout(ensureFancybox, 200);
+  setTimeout(ensureHeoLivePhoto, 200);
 }
 
 bindDocumentListeners();

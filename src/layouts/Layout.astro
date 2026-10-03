@@ -247,15 +247,9 @@ const bg = SITE.background;
 
     <AccentColorInjector />
 
-    <!-- Fancybox lightbox (local, avoids CDN tracking-prevention blocks).
-         Used by live galleries (person-life / Love-eyes). Static galleries use
-         the built-in <dialog> lightbox instead. is:inline so the UMD global is
-         re-evaluated on each View Transition navigation (idempotent). -->
-    <link rel="stylesheet" href="/fancybox/fancybox.min.css" />
-    <script is:inline src="/fancybox/fancybox.umd.min.js"></script>
-    <!-- HeoLivePhoto: Motion Photo / .pvt thumbnail live playback (patched:
-         auto-scan removed; driven by src/scripts/live-gallery.ts via IO). -->
-    <script is:inline src="/livephoto/heolivephoto.js" defer></script>
+    <!-- Fancybox (189KB) + HeoLivePhoto (11KB) 不再全局加载。
+         由 src/scripts/live-gallery.ts 的 ensureFancybox()/ensureHeoLivePhoto()
+         按需注入：仅当页面存在 [data-fancybox] 或 livephoto 缩略图时才下载。 -->
   </head>
   <body>
     <!-- Global fixed background: gallery image + blur + readability overlay -->
@@ -323,6 +317,26 @@ const bg = SITE.background;
     transform: scale(var(--bg-scale, 1.08));
     filter: blur(var(--bg-blur, 24px)) saturate(1.05);
     will-change: transform;
+    /* 固定不重排，避免滚动时重新计算 blur */
+    contain: paint;
+  }
+
+  /* 小屏 blur 减半：移动端 GPU 预算有限，24px 全屏 blur 是主要卡顿源 */
+  @media (max-width: 768px) {
+    .site-bg-img {
+      filter: blur(12px) saturate(1);
+    }
+  }
+
+  /* 滚动时进一步降级：blur 降低 + 玻璃 backdrop-filter 减薄 */
+  body.is-scrolling .site-bg-img {
+    filter: blur(8px) saturate(1);
+  }
+  body.is-scrolling header,
+  body.is-scrolling [data-drawer]:not([hidden]),
+  body.is-scrolling aside {
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
   }
 
   .site-bg-overlay {
@@ -494,5 +508,25 @@ const bg = SITE.background;
         );
       });
     </script>
-  )
+  )}
+
+  <!-- 滚动状态切换：滚动期间降低背景 blur 与玻璃 backdrop-filter，减少重绘卡顿 -->
+  <script>
+    let scrollTimer: ReturnType<typeof setTimeout> | null = null;
+    document.addEventListener(
+      "scroll",
+      () => {
+        if (scrollTimer) return;
+        document.body.classList.add("is-scrolling");
+        scrollTimer = setTimeout(() => {
+          document.body.classList.remove("is-scrolling");
+          scrollTimer = null;
+        }, 120);
+      },
+      { passive: true }
+    );
+    document.addEventListener("astro:page-load", () => {
+      document.body.classList.remove("is-scrolling");
+    });
+  </script>
 }

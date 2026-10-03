@@ -10,6 +10,7 @@ import TwikooComment from "@/components/TwikooComment.astro";
 import Breadcrumb from "@/components/Breadcrumb.astro";
 import BackToTopButton from "@/components/BackToTopButton.astro";
 import TocButton from "@/components/TocButton.astro";
+import Sidebar from "@/components/Sidebar.astro";
 import GalleryEmbed from "@/components/GalleryEmbed.astro";
 import LinkCard from "@/components/LinkCard.astro";
 import { getPostPath } from "@/utils/getPath";
@@ -102,9 +103,13 @@ const nextPost =
   {SITE.showBackButton && <Breadcrumb withBackButton />}
   <main
     id="main-content"
-    class:list={["relative app-layout pb-12", { "mt-8": !SITE.showBackButton }]}
+    class:list={["relative pb-12", { "mt-8": !SITE.showBackButton }]}
     data-pagefind-body
   >
+    <div
+      class="mx-auto w-full max-w-6xl px-4 lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] lg:gap-8"
+    >
+      <div class="min-w-0">
     <!-- Post header section -->
     <header class="post-header relative mb-10 text-center">
       <div class="post-hero-bg"></div>
@@ -358,6 +363,10 @@ const nextPost =
 
     <!-- ═══════ Twikoo 评论区 ═══════ -->
     <TwikooComment />
+      </div>
+      {/* 文章页侧边栏：主页同款，含目录卡片；站点信息隐藏；手机端整体隐藏 */}
+      <Sidebar headings={headings} showSiteInfo={false} />
+    </div>
   </main>
   <BackToTopButton />
   <TocButton headings={headings} />

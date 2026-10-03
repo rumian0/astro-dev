@@ -1,12 +1,13 @@
 ---
 /**
- * TwikooComment — 评论区组件
+ * TwikooComment — 评论区组件（自动加载，无需点击展开）
  * 自建服务：twikoo.mingcy.cn
  *
- * - 懒加载：首次点击「展开评论区」才下载 Twikoo 主脚本
- * - 自适应主题：监听 html[data-theme] 切换，重刷配色
- * - View Transitions 兼容：astro:page-load 重新绑定（幂等）
- * - 容器高度：滚动区限制在 60vh，避免整页被撑长
+ * - 自动加载：astro:page-load 触发即加载，不再需要「展开评论区」按钮
+ * - 多 CDN 回退：npmmirror → staticfile → jsdelivr → unpkg
+ *   （原方案只用 jsdelivr，国内经常被墙/超时导致加载失败）
+ * - 自适应主题：监听 html[data-theme] 切换与 storage 事件，重刷配色
+ * - View Transitions 兼容：每次 page-load 按当前 path 重新挂载（幂等）
  */
 import { SITE } from "@/config";
 
@@ -21,36 +22,7 @@ const twikoo = SITE.twikoo;
     data-env-id={twikoo.envId}
     aria-label="Comments"
   >
-    <!-- 未展开状态：只显示一个折叠按钮 -->
-    <button
-      id="twikoo-toggle"
-      class="twikoo-toggle"
-      type="button"
-      aria-expanded="false"
-      aria-controls="twikoo-container"
-    >
-      <svg
-        class="tk-toggle-icon"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      </svg>
-      <span class="tk-toggle-text">展开评论区</span>
-      <span class="tk-toggle-count" data-twikoo-count></span>
-    </button>
-
-    <!-- 展开后的实际评论区 -->
-    <div
-      id="twikoo-container"
-      class="twikoo-container"
-      hidden
-      aria-hidden="true"
-    >
+    <div id="twikoo-container" class="twikoo-container">
       <!-- 加载占位 -->
       <div class="tk-loading" data-tk-loading>
         <span class="tk-loading-ring"></span>
@@ -63,72 +35,63 @@ const twikoo = SITE.twikoo;
 )}
 
 <script>
-  let inited = false;
-  let expanded = false;
-  let loaded = false;
+  // ═══ 自动加载 + 多 CDN 回退 ═══
+  // 顺序：国内可达的优先（npmmirror / staticfile），jsdelivr/unpkg 兜底
+  const CDN_LIST = [
+    "https://registry.npmmirror.com/twikoo/1.6.23/files/dist/twikoo.min.js",
+    "https://cdn.staticfile.net/twikoo/1.6.23/twikoo.min.js",
+    "https://cdn.jsdelivr.net/npm/twikoo@1.6.23/dist/twikoo.min.js",
+    "https://unpkg.com/twikoo@1.6.23/dist/twikoo.min.js",
+  ];
 
-  function initTwikoo() {
-    const mount = document.getElementById("twikoo-comment");
-    if (!mount) return;
-
-    const envId =
-      document.querySelector(".twikoo-section")?.getAttribute("data-env-id") ||
-      "";
-    if (!envId) {
-      const loading = document.querySelector("[data-tk-loading]");
-      if (loading) loading.textContent = "评论区未配置";
-      return;
-    }
-
-    const onReady = () => {
-      if (loaded) return;
-      loaded = true;
-      mount.innerHTML = "";
-      (window as any).Twikoo.init({
-        el: "#twikoo-comment",
-        envId: envId,
-        serverURL: envId,
-        path: location.pathname,
-        nick: "",
-        avatar: "",
-        region: "",
-        language: "zh-CN",
-        emojiUrl: "https://gw.alicdn.com/seed",
-        onInit: () => {
-          document
-            .querySelector("[data-tk-loading]")
-            ?.remove();
-          refreshColors();
-          const countEl = document.querySelector("[data-twikoo-count]");
-          const cnt = mount.querySelectorAll(".tk-comment").length;
-          if (countEl) countEl.textContent = cnt ? `${cnt} 条` : "";
-        },
-      } as any);
-    };
-
+  function loadTwikooScript(onReady: () => void, onFail: () => void) {
+    // 已加载 / 已有成功标记的脚本
     if ((window as any).Twikoo) {
       onReady();
       return;
     }
-
-    // 懒加载 CDN
-    let s = document.querySelector<HTMLScriptElement>(
-      "script[src*='/twikoo.min.js']"
+    const ok = document.querySelector<HTMLScriptElement>(
+      "script[data-twikoo][data-ok]"
     );
-    if (!s) {
-      s = document.createElement("script");
-      s.src = "https://cdn.jsdelivr.net/npm/twikoo@1.6.23/dist/twikoo.min.js";
-      s.async = true;
-      document.head.appendChild(s);
+    if (ok) {
+      onReady();
+      return;
     }
-    s.addEventListener("load", onReady);
-    s.addEventListener("error", () => {
-      const loading = document.querySelector("[data-tk-loading]");
-      if (loading) {
-        loading.textContent = "评论区加载失败，请稍后重试";
-        loading.classList.add("tk-loading--error");
+
+    // 已有正在加载的脚本 → 等它完成
+    const pending = document.querySelector<HTMLScriptElement>(
+      "script[data-twikoo]:not([data-ok]):not([data-fail])"
+    );
+    if (pending) {
+      pending.addEventListener("load", () => {
+        pending.dataset.ok = "1";
+        onReady();
+      });
+      pending.addEventListener("error", onFail);
+      return;
+    }
+
+    // 逐 CDN 尝试
+    const tryNext = (i: number) => {
+      if (i >= CDN_LIST.length) {
+        onFail();
+        return;
       }
-    });
+      const s = document.createElement("script");
+      s.src = CDN_LIST[i];
+      s.async = true;
+      s.dataset.twikoo = "1";
+      s.addEventListener("load", () => {
+        s.dataset.ok = "1";
+        onReady();
+      });
+      s.addEventListener("error", () => {
+        s.dataset.fail = "1";
+        tryNext(i + 1);
+      });
+      document.head.appendChild(s);
+    };
+    tryNext(0);
   }
 
   function refreshColors() {
@@ -145,41 +108,58 @@ const twikoo = SITE.twikoo;
     if (border) html.style.setProperty("--tk-color-border", border);
   }
 
-  function bind() {
-    if (inited) return;
-    inited = true;
+  function initSection() {
+    if (!document.getElementById("twikoo-comment")) return;
 
-    const btn = document.getElementById("twikoo-toggle");
-    const box = document.getElementById("twikoo-container");
-    if (!btn || !box) return;
+    const section = document.querySelector(".twikoo-section");
+    const envId = section?.getAttribute("data-env-id") || "";
+    if (!envId) {
+      const loading = document.querySelector("[data-tk-loading]");
+      if (loading) loading.textContent = "评论区未配置";
+      return;
+    }
 
-    btn.addEventListener("click", () => {
-      expanded = !expanded;
-      box.hidden = !expanded;
-      box.setAttribute("aria-hidden", String(!expanded));
-      btn.setAttribute("aria-expanded", String(expanded));
-      btn.classList.toggle("tk-open", expanded);
-      const text = btn.querySelector(".tk-toggle-text") as HTMLElement;
-      if (text) text.textContent = expanded ? "收起评论区" : "展开评论区";
-      if (expanded && !loaded) {
-        initTwikoo();
-        refreshColors();
+    const showError = () => {
+      const loading = document.querySelector("[data-tk-loading]");
+      if (loading) {
+        loading.textContent = "评论区加载失败，请稍后重试";
+        loading.classList.add("tk-loading--error");
       }
-    });
+    };
+
+    // 用「当前的挂载点 / 当前的 path」初始化（View Transitions 切页后仍是当前页），
+    // 避免异步回调捕获旧页元素导致错挂
+    loadTwikooScript(
+      () => {
+        const mount = document.getElementById("twikoo-comment");
+        if (!mount || mount.dataset.tkInited === "1") return;
+        mount.dataset.tkInited = "1";
+        document.querySelector("[data-tk-loading]")?.remove();
+        refreshColors();
+        (window as any).Twikoo.init({
+          el: "#twikoo-comment",
+          envId,
+          serverURL: envId,
+          path: location.pathname,
+          nick: "",
+          avatar: "",
+          region: "",
+          language: "zh-CN",
+          emojiUrl: "https://gw.alicdn.com/seed",
+          onInit: () => refreshColors(),
+        } as any);
+      },
+      showError
+    );
   }
 
   document.addEventListener("astro:page-load", () => {
-    // View Transitions 下：容器仍存在则只重新绑定主题；否则重新初始化
-    bind();
+    initSection();
     refreshColors();
-    if (expanded && (window as any).Twikoo) {
-      // 重新初始化以切换到新页面的 path
-      initTwikoo();
-    }
   });
 
   // 主题切换时同步配色
-  window.addEventListener("storage", (e) => {
+  window.addEventListener("storage", e => {
     if (e.key === "theme") refreshColors();
   });
 
@@ -188,39 +168,6 @@ const twikoo = SITE.twikoo;
 </script>
 
 <style>
-  /* ═══ 折叠按钮 ═══ */
-  .twikoo-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.55rem;
-    padding: 0.55rem 1.1rem;
-    border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--border) 30%, transparent);
-    background: color-mix(in srgb, var(--foreground) 4%, transparent);
-    color: color-mix(in srgb, var(--foreground) 75%, transparent);
-    font-size: 0.85rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.25s ease;
-    align-self: center;
-  }
-  .twikoo-toggle:hover {
-    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
-    box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 8%, transparent);
-  }
-  .tk-toggle-icon {
-    width: 1rem;
-    height: 1rem;
-  }
-  .tk-toggle-count {
-    font-size: 0.72rem;
-    color: var(--accent);
-    font-family: var(--font-firacode), monospace;
-    margin-left: 0.15rem;
-  }
-
   /* ═══ 评论区容器 ═══ */
   .twikoo-container {
     margin-top: 1.25rem;

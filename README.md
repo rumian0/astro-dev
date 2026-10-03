@@ -442,3 +442,27 @@ node -e \
 - **验证**：`astro check` 0 错误；`@astrojs/compiler` + esbuild 直验通过；
   dev 实机 grep 确认 9/9 toc slug 全部命中正文 DOM id（高亮前提成立），
   `IntersectionObserver` 计数为 0
+
+#### 13. 文章侧边栏 + 评论/页脚修复（2026-10-03）
+
+- **文章页加主页同款侧边栏**：`PostDetails.astro` 改为
+  `lg:grid-cols-[minmax(0,1fr)_18rem]` 双栏（内容左、sticky 侧边栏右），
+  手机端随 `hidden lg:block` 整体隐藏
+- **目录卡片**：`Sidebar.astro` 新增 `headings` prop，在「今日一言」之下渲染
+  「文章目录」卡片（服务端树 + 客户端高亮，复用 `initTocHighlight` 引擎）；
+  首页不传 headings 故无此卡
+- **站点信息卡片按页面显隐**：新增 `showSiteInfo` prop——文章页传 `false`
+  隐藏「构建平台/技术栈」，首页保留
+- **TOC 引擎抽共享模块**：`src/utils/tocTree.ts`（树构建/渲染，含 h1 归一化）
+  + `src/scripts/toc-highlight.ts`（rAF 滚动探测 + 指示条 + 读数），
+  TocButton HUD 与 Sidebar 目录卡片共用；浮动按钮改为 `lg:hidden`
+  （桌面端由侧边栏目录承担，手机端保留浮动按钮）
+- **Twikoo 评论区**：移除「展开评论区」按钮，改为**自动加载**；
+  CDN 从单一 jsdelivr 改为多源回退
+  （npmmirror → staticfile → jsdelivr → unpkg，国内可达性优先）
+- **友链页评论区**：`/links` 页接入 `<TwikooComment />`
+- **页脚 Logo**：`Ming {·} CY` 去掉大括号，改为 `Ming · CY`
+  （`{·}` 字面量在页脚缩小后 `}` 像错字）
+- **排查发现**：`twikoo.mingcy.cn` 的 HTTPS 443 握手失败（HTTP 308 但 TLS
+  connect error 35），疑似 Vercel 部署停摆——评论加载不了的主因是**服务端**，
+  代码层面已尽力（自动加载 + 多 CDN），需检查该部署

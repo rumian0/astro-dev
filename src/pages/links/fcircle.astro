@@ -15,28 +15,6 @@ const structuredData = {
   description: "Friend Circle — aggregated feed of friends' latest posts.",
   isPartOf: { "@type": "WebSite", name: SITE.title, url: SITE.website },
 };
-
-// Friend-Circle-Lite 插件后端（public/fclite/fclite.js 读取的接口）
-//   statistical_data: { friends_num, active_num, error_num, article_num, last_updated_time }
-//   article_data: [{ title, created, link, author, avatar }]
-const API_URL = "https://fc.mingcy.cn/all.json";
-
-// 构建时预取数据并内联 → 客户端预填插件 localStorage 缓存，零等待渲染
-let inlineData: string | null = null;
-try {
-  const res = await fetch(API_URL, {
-    headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(8000),
-  });
-  if (res.ok) {
-    const json = await res.json();
-    if (Array.isArray(json?.article_data) && json.article_data.length) {
-      inlineData = JSON.stringify(json).replace(/</g, "\\u003c");
-    }
-  }
-} catch {
-  // 构建环境无外网/超时：走客户端 fetch（FCLite 自带）
-}
 ---
 
 <Layout title={title} description="友圈 — 聚合友链站点的最新文章" structuredData={structuredData}>
@@ -59,435 +37,70 @@ try {
       </div>
     </div>
 
-    <!-- ═══ 构建时预取数据（预填插件缓存，客户端零等待）═══ -->
-    {inlineData && (
-      <script
-        is:inline
-        type="application/json"
-        id="fc-preload"
-        set:html={inlineData}
-      ></script>
-    )}
-
-    <!-- ═══ FCLite 插件挂载点（public/fclite/fclite.js）═══ -->
-    <section class="fc-shell">
-      <div id="friend-circle-lite-root"></div>
-
-      <!-- 友链状态 -->
-      <div class="status-section">
+    <!-- ═══ 友圈（Friend-Circle-Lite）═══ -->
+    <div class="fcircle-wrap">
+      <section class="feed-section">
+        <div id="friend-circle-lite-root"></div>
+      </section>
+      <section class="status-section">
         <div class="status-head">
-          <h2 class="status-title">
-            <svg
-              class="status-icon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              ><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline
-                points="22 4 12 14.01 9 11.01" /></svg
-            >
-            友链状态
-          </h2>
+          <h2 class="status-title">友链状态</h2>
           <span id="links-summary" class="status-summary">加载中…</span>
         </div>
         <div id="links-grid" class="status-grid"></div>
-      </div>
-    </section>
+      </section>
+    </div>
   </main>
   <Footer />
 </Layout>
 
-<!-- FCLite 插件样式 -->
-<link rel="stylesheet" href="/fclite/fclite.css" />
-
-<!-- 插件配置 + 加载（is:inline：依赖 window.UserConfig + 动态脚本） -->
-<script is:inline>
-  (function () {
-    var API = "https://fc.mingcy.cn/";
-    var FCLITE_JS = "/fclite/fclite.js";
-    var CACHE_KEY = "friend-circle-lite-cache";
-    var CACHE_TIME_KEY = "friend-circle-lite-cache-time";
-    var TTL = 10 * 60 * 1000; // 插件 10 分钟缓存
-
-    function esc(t) {
-      if (!t) return "";
-      var d = document.createElement("div");
-      d.textContent = t;
-      return d.innerHTML;
-    }
-
-    function ensureFclite(cb) {
-      if (typeof initialize_fc_lite === "function") {
-        cb();
-        return;
-      }
-      if (document.querySelector("script[data-fclite]")) {
-        setTimeout(function () { ensureFclite(cb); }, 100);
-        return;
-      }
-      var s = document.createElement("script");
-      s.src = FCLITE_JS;
-      s.setAttribute("data-fclite", "1");
-      s.onload = cb;
-      s.onerror = function () {
-        s.removeAttribute("data-fclite");
-        setTimeout(boot, 1000);
-      };
-      document.head.appendChild(s);
-    }
-
-    // ── 用构建时内联数据预填插件缓存 → 首次渲染零等待 ──
-    function prefillCache() {
-      var pre = document.getElementById("fc-preload");
-      if (!pre) return; // 无预取走客户端 fetch
-      try {
-        var data = JSON.parse(pre.textContent || "null");
-        if (data && Array.isArray(data.article_data) && data.article_data.length) {
-          var cachedTime = Number(localStorage.getItem(CACHE_TIME_KEY) || 0);
-          var now = Date.now();
-          // 仅在缓存过期或缺失时预填（不覆盖更"新"的本地缓存）
-          if (!cachedTime || now - cachedTime > TTL) {
-            localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-            localStorage.setItem(CACHE_TIME_KEY, String(now));
-          }
-        }
-      } catch (e) {
-        /* 忽略：走客户端 fetch */
-      }
-    }
-
-    // ── 友链状态（status.json）──
-    function renderStatus() {
-      var summary = document.getElementById("links-summary");
-      var grid = document.getElementById("links-grid");
-      if (!summary || summary.dataset.state === "done") return;
-      summary.dataset.state = "done";
-      fetch(API + "status.json")
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          var links = (data && data.link_status) || [];
-          var ok = 0;
-          links.forEach(function (it) { if (it.success) ok++; });
-          summary.innerHTML =
-            '<span class="stat-ok">' + ok + " 正常</span>" +
-            '<span class="stat-sep">·</span>' +
-            '<span class="stat-fail">' + (links.length - ok) + " 异常</span>";
-          if (!grid) return;
-          grid.innerHTML = links
-            .map(function (item) {
-              var cls = item.success ? "ok" : "fail";
-              var label = item.success ? "正常" : "异常";
-              return (
-                '<a class="status-card ' + cls + '" href="' + item.link +
-                '" target="_blank" rel="noopener" title="' + esc(item.name) +
-                '"><span class="sc-indicator"></span><span class="sc-name">' +
-                esc(item.name) + '</span><span class="sc-label">' + label +
-                "</span></a>"
-              );
-            })
-            .join("");
-        })
-        .catch(function () { summary.textContent = "暂无数据"; });
-    }
-
-    function boot() {
-      prefillCache();
-      var root = document.getElementById("friend-circle-lite-root");
-      if (root) {
-        ensureFclite(function () {
-          if (root.children.length === 0) {
-            try { initialize_fc_lite(); } catch (e) { console.warn(e); }
-          }
-        });
-      }
-      renderStatus();
-    }
-
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", function () {
-        setTimeout(boot, 150);
-        setTimeout(boot, 700);
-      });
-    } else {
-      setTimeout(boot, 150);
-      setTimeout(boot, 700);
-    }
-    document.addEventListener("astro:page-load", function () {
-      setTimeout(boot, 150);
-      setTimeout(boot, 700);
-    });
-  })();
-</script>
+<!-- 插件样式 -->
+<link rel="stylesheet" href="/fcircle/fcircle.css" />
 
 <style is:global>
-  /* ═══ FCLite 插件主题化：CSS 变量映射到站点主题 ═══ */
-  :root {
-    --hover-color: var(--accent);
-    --author-color-light: var(--foreground);
-    --author-color-dark: var(--foreground);
-    --shadow-color-light: var(--foreground);
-    --shadow-color-dark: var(--foreground);
-    --border-color-light: var(--border);
-    --border-color-dark: var(--border);
-    --text-color-light: var(--foreground);
-    --text-color-dark: var(--foreground);
-    --background-color-light: var(--background);
-    --background-color-dark: var(--background);
-    --container-bg-color-light: var(--background);
-    --container-bg-color-dark: var(--background);
-    --modal-bg-color: color-mix(in srgb, var(--background) 55%, transparent);
-    --modal-content-bg-color: color-mix(in srgb, var(--background) 92%, transparent);
-    --load-more-btn-bg-color: color-mix(in srgb, var(--foreground) 5%, transparent);
-    --tag-bg-color: color-mix(in srgb, var(--accent) 10%, transparent);
-  }
-
-  .fc-shell {
+  /* ── 与站点对齐：宽度、间距、hero 与插件的衔接 ── */
+  .fcircle-wrap {
     margin-top: 1.5rem;
+    max-width: 72rem;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
   }
 
-  /* 随机文章卡 */
-  #random-article {
-    border: 1px solid color-mix(in srgb, var(--border) 35%, transparent);
-    background: color-mix(in srgb, var(--foreground) 3%, var(--background));
-    border-radius: 1rem;
-    padding: 1.25rem;
-  }
-  #random-article .random-container-title {
-    color: color-mix(in srgb, var(--foreground) 55%, transparent);
-    font-size: 0.85rem;
-    letter-spacing: 0.05em;
-  }
-  #random-article .random-title {
-    color: var(--foreground);
-    font-weight: 700;
-  }
-  #random-article .random-title:hover {
-    color: var(--accent);
-  }
-  #random-article .stat-num {
-    color: var(--accent);
-    font-family: var(--font-firacode), monospace;
-  }
-  #random-article .random-author,
-  #random-article .random-date {
-    background: color-mix(in srgb, var(--foreground) 5%, transparent);
-    border: 1px solid var(--border);
-    color: color-mix(in srgb, var(--foreground) 60%, transparent);
-    border-radius: 999px;
-    font-size: 0.75rem;
-    padding: 0.25rem 0.7rem;
-  }
-  #random-article #refresh-random-article {
-    color: var(--accent);
-    text-decoration: none;
-  }
-  #random-article .random-link-button {
-    border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
-    background: color-mix(in srgb, var(--accent) 10%, transparent);
-    color: var(--accent);
+  /* feed-section 与站点正文宽度一致 */
+  .fcircle-wrap .feed-section {
+    margin-bottom: 2rem;
   }
 
-  /* 文章卡片 */
-  #friend-circle-lite-root .card {
-    border: 1px solid color-mix(in srgb, var(--border) 25%, transparent);
-    background: color-mix(in srgb, var(--foreground) 4%, var(--background));
-    border-radius: 1rem;
-    transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-  }
-  #friend-circle-lite-root .card:hover {
-    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-    transform: translateY(-4px);
-    box-shadow: 0 8px 30px color-mix(in srgb, var(--accent) 10%, transparent);
-  }
-  #friend-circle-lite-root .card-title {
-    color: var(--foreground);
-    font-weight: 650;
-  }
-  #friend-circle-lite-root .card-title:hover {
-    color: var(--accent);
-  }
-  #friend-circle-lite-root .card-author {
-    background: color-mix(in srgb, var(--foreground) 5%, transparent);
-    border: 1px solid var(--border);
-    color: color-mix(in srgb, var(--foreground) 60%, transparent);
-  }
-  #friend-circle-lite-root .card-date {
-    color: color-mix(in srgb, var(--foreground) 45%, transparent);
-  }
-
-  /* 加载更多 + 统计 */
-  #friend-circle-lite-root #load-more-btn {
-    color: var(--foreground);
-    border: 1px solid color-mix(in srgb, var(--border) 30%, transparent);
-    border-radius: 999px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-  }
-  #friend-circle-lite-root #load-more-btn:hover {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #fff;
-  }
-  #friend-circle-lite-root #stats-container {
-    color: color-mix(in srgb, var(--foreground) 40%, transparent);
-  }
-
-  /* 弹窗 */
-  #friend-circle-lite-root .modal-content {
-    border: 1px solid var(--border);
-    border-radius: 1.25rem;
-  }
-  #friend-circle-lite-root .modal-article {
-    border: 1px solid color-mix(in srgb, var(--border) 20%, transparent);
-    background: color-mix(in srgb, var(--foreground) 4%, transparent);
-    border-radius: 0.85rem;
-    transition: border-color 0.18s;
-  }
-  #friend-circle-lite-root .modal-article:hover {
-    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-  }
-  #friend-circle-lite-root .modal-article-title {
-    color: var(--foreground);
-    font-weight: 650;
-  }
-  #friend-circle-lite-root .modal-article-title:hover {
-    color: var(--accent);
-  }
-
-  /* 加载 spinner */
-  #friend-circle-lite-root .loading-spinner {
-    border-color: var(--border);
-    border-top-color: var(--accent);
-  }
-
-  /* ═══ 友链状态区 ═══ */
-  .status-section {
-    padding: 1.75rem;
-    border-radius: 1.25rem;
-    border: 1px solid var(--border);
-    background: color-mix(in srgb, var(--foreground) 3%, transparent);
-    margin-top: 2rem;
-  }
-  .status-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1.25rem;
-  }
-  .status-title {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 1.1rem;
-    font-weight: 700;
-    margin: 0;
-    color: var(--foreground);
-  }
-  .status-icon {
-    width: 1.1rem;
-    height: 1.1rem;
-    color: var(--accent);
-    opacity: 0.7;
-  }
-  .status-summary {
-    font-size: 0.8rem;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    opacity: 0.7;
-    color: color-mix(in srgb, var(--foreground) 60%, transparent);
-  }
-  .stat-ok { color: #22c55e; }
-  .stat-fail { color: #ef4444; }
-  .stat-sep { opacity: 0.3; }
-  .status-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 0.5rem;
-  }
-  .status-card {
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
-    padding: 0.55rem 0.75rem;
-    border-radius: 0.75rem;
-    text-decoration: none;
-    font-size: 0.82rem;
-    border: 1px solid var(--border);
-    background: color-mix(in srgb, var(--foreground) 4%, transparent);
-    transition: all 0.25s ease;
-  }
-  .status-card:hover { transform: translateY(-2px); }
-  .status-card.ok:hover {
-    border-color: color-mix(in srgb, #22c55e 30%, transparent);
-    box-shadow: 0 4px 16px color-mix(in srgb, #22c55e 8%, transparent);
-  }
-  .status-card.fail:hover {
-    border-color: color-mix(in srgb, #ef4444 30%, transparent);
-    box-shadow: 0 4px 16px color-mix(in srgb, #ef4444 8%, transparent);
-  }
-  .sc-indicator {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-  .status-card.ok .sc-indicator {
-    background: #22c55e;
-    box-shadow: 0 0 6px color-mix(in srgb, #22c55e 50%, transparent);
-  }
-  .status-card.fail .sc-indicator {
-    background: #ef4444;
-    box-shadow: 0 0 6px color-mix(in srgb, #ef4444 50%, transparent);
-  }
-  .sc-name {
-    flex: 1;
+  /* 插件容器：让随机文章卡与统计栏在窄屏不错位 */
+  .fcircle-wrap #friend-circle-lite-root {
+    max-width: 100%;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--foreground);
+    overflow-x: clip;
   }
-  .sc-label {
-    flex-shrink: 0;
-    font-size: 0.7rem;
-    font-weight: 600;
-    padding: 0.1rem 0.45rem;
-    border-radius: 999px;
-  }
-  .status-card.ok .sc-label {
-    color: #22c55e;
-    background: color-mix(in srgb, #22c55e 12%, transparent);
-  }
-  .status-card.fail .sc-label {
-    color: #ef4444;
-    background: color-mix(in srgb, #ef4444 12%, transparent);
+
+  /* 状态区：与文章卡片、侧边栏一致的玻璃质感 */
+  .fcircle-wrap .status-section {
+    border-radius: 1.25rem;
   }
 
   /* 移动端：插件卡片单列 + 溢出修复 */
   @media (max-width: 768px) {
-    .fc-shell { max-width: 100%; overflow-x: clip; }
-    #friend-circle-lite-root { max-width: 100%; min-width: 0; overflow-x: clip; }
-    #friend-circle-lite-root .articles-container {
-      grid-template-columns: minmax(0, 1fr) !important;
-      gap: 0.7rem !important;
-      width: 100% !important;
+    .fcircle-wrap {
+      max-width: 100%;
+      overflow-x: clip;
     }
-    #friend-circle-lite-root .card {
-      width: 100%; max-width: 100%; min-width: 0;
-      overflow: hidden;
+    .fcircle-wrap #friend-circle-lite-root {
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: clip;
     }
-    #friend-circle-lite-root #random-article { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
-    #friend-circle-lite-root .random-stats {
-      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    .fcircle-wrap .status-section {
+      max-width: 100%;
     }
-    .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .status-card { min-width: 0; max-width: 100%; }
-    .status-section { padding: 1.1rem; max-width: 100%; }
-  }
-  @media (max-width: 640px) {
-    .status-head { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
   }
 </style>
+
+<!-- 插件脚本：自包含、幂等（内部有 __fcircleReady 守卫）。
+     is:inline 防止 Astro 把它当作模块打包改写。 -->
+<script is:inline src="/fcircle/fcircle.js"></script>

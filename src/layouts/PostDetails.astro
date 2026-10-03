@@ -6,6 +6,7 @@ import Footer from "@/components/Footer.astro";
 import Datetime from "@/components/Datetime.astro";
 import EditPost from "@/components/EditPost.astro";
 import ShareLinks from "@/components/ShareLinks.astro";
+import TwikooComment from "@/components/TwikooComment.astro";
 import Breadcrumb from "@/components/Breadcrumb.astro";
 import BackToTopButton from "@/components/BackToTopButton.astro";
 import GalleryEmbed from "@/components/GalleryEmbed.astro";
@@ -353,6 +354,9 @@ const nextPost =
         )
       }
     </div>
+
+    <!-- ═══════ Twikoo 评论区 ═══════ -->
+    <TwikooComment />
   </main>
   <BackToTopButton />
   <Footer />

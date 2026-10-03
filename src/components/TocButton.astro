@@ -1,543 +1,448 @@
 ---
 /**
- * TocButton — 文章目录（右下角浮动图标，点击展开）
- * - 仅文章详情页挂载（PostDetails.astro）
- * - 扫描 #main-content 的 h2/h3/h4，构建树形层级
- * - 折叠/展开子项，当前章节自动展开祖先链路
- * - 滚动时 IntersectionObserver 高亮 + 同步激活态
- * - 少于 2 个标题整体隐藏
+ * TocButton — 文章目录（右下角浮动按钮 + 弹出树形面板）
+ *
+ * 服务端：通过 astro:content render() 返回的 headings 构建标题树
+ * 客户端：仅处理弹窗开关、滚动高亮、平滑滚动
+ *
+ * 布局：位于 btt-btn-container（返回顶部按钮）正上方，尺寸一致
+ * 面板：弹窗形式，底部追加固定「评论」导航项 → #comments
  */
+interface Props {
+  headings: Array<{ depth: number; slug: string; text: string }>;
+}
+
+const { headings } = Astro.props;
+
+// ── 构建树形结构 ──
+type TocNode = {
+  depth: number;
+  slug: string;
+  text: string;
+  children: TocNode[];
+};
+
+const tree: TocNode[] = [];
+const stack: TocNode[] = [];
+for (const h of headings) {
+  const node: TocNode = { ...h, children: [] };
+  while (stack.length && stack[stack.length - 1].depth >= h.depth) {
+    stack.pop();
+  }
+  if (stack.length) stack[stack.length - 1].children.push(node);
+  else tree.push(node);
+  stack.push(node);
+}
+
+// ── 递归渲染 HTML ──
+// 缩进公式：(depth - 2) * 16px
+// h2=0, h3=16, h4=32, h5=48
+function renderTree(nodes: TocNode[]): string {
+  return nodes
+    .map((n) => {
+      const indent = Math.max(0, (n.depth - 2) * 16);
+      const dotClass = n.depth <= 2 ? "solid" : "hollow";
+      const childrenHtml = n.children.length
+        ? `<div class="toc-children">${renderTree(n.children)}</div>`
+        : "";
+      return `<div class="toc-node" style="padding-left:${indent}px" data-depth="${n.depth}">
+        <div class="toc-row">
+          <span class="toc-dot ${dotClass}" aria-hidden="true"></span>
+          <a href="#${n.slug}" class="toc-link" data-slug="${n.slug}">${n.text}</a>
+        </div>${childrenHtml}
+      </div>`;
+    })
+    .join("");
+}
+
+const treeHtml = renderTree(tree);
+
+
 ---
 
-<div id="toc-button-root" class="toc-root" hidden aria-hidden="true">
-  <button
-    type="button"
-    id="toc-fab"
-    class="toc-fab"
-    aria-label="打开目录"
-    aria-expanded="false"
-    title="目录"
-  >
-    <svg
-      class="toc-fab-icon"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      aria-hidden="true"
+    <div
+      id="toc-fab-container"
+      class="pointer-events-none fixed end-4 bottom-24 z-50 transition-[opacity,transform] duration-300 ease-out md:end-8 md:bottom-28 motion-reduce:transition-none"
     >
-      <line x1="8" y1="6" x2="21" y2="6"></line>
-      <line x1="8" y1="12" x2="21" y2="12"></line>
-      <line x1="8" y1="18" x2="21" y2="18"></line>
-      <line x1="3" y1="6" x2="3.01" y2="6"></line>
-      <line x1="3" y1="12" x2="3.01" y2="12"></line>
-      <line x1="3" y1="18" x2="3.01" y2="18"></line>
-    </svg>
-    <span class="toc-fab-dot" aria-hidden="true"></span>
-  </button>
-
-  <div id="toc-panel" class="toc-panel" role="dialog" aria-label="文章目录" hidden>
-    <div class="toc-head">
-      <span class="toc-title">目录</span>
-      <button type="button" class="toc-close" aria-label="关闭目录">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      <button
+        id="toc-fab"
+        type="button"
+        aria-label="打开目录"
+        aria-expanded="false"
+        title="目录"
+        class:list={[
+          "pointer-events-auto group relative flex flex-col items-center justify-center",
+          "size-14 rounded-full",
+          "md:size-16",
+          "border border-accent/15 bg-background/75 backdrop-blur-md",
+          "shadow-[0_4px_20px_rgba(0,0,0,0.20)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.60)]",
+          "hover:shadow-[0_6px_28px_rgba(0,0,0,0.30)] dark:hover:shadow-[0_6px_28px_rgba(0,0,0,0.75)]",
+          "hover:scale-105 active:scale-95 motion-reduce:hover:scale-100 motion-reduce:active:scale-100",
+          "transition-all duration-200 ease-out motion-reduce:transition-none",
+          "text-foreground/70 hover:text-accent",
+        ]}
+      >
+        <svg
+          class="size-5 md:size-6"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <line x1="4" y1="6" x2="20" y2="6"></line>
+          <line x1="4" y1="12" x2="14" y2="12"></line>
+          <line x1="4" y1="18" x2="10" y2="18"></line>
+        </svg>
+        <span class="text-[8px] font-medium tracking-wider uppercase opacity-0 transition-opacity duration-200 group-hover:opacity-70">
+          TOC
+        </span>
       </button>
+
+      <!-- ═══ 弹出面板 ═══ -->
+      <div
+        id="toc-panel"
+        class="pointer-events-auto absolute bottom-full mb-3 end-0 hidden flex-col overflow-hidden rounded-2xl border border-border/30 bg-background/85 shadow-2xl backdrop-blur-xl"
+        style="width: min(72vw, 18rem); max-height: min(60vh, 28rem);"
+        role="dialog"
+        aria-label="文章目录"
+      >
+        <!-- 面板头部 -->
+        <div class="flex items-center justify-between px-4 py-2.5 border-b border-border/20 shrink-0">
+          <span class="text-sm font-semibold tracking-wide text-foreground flex items-center gap-1.5">
+            <span class="size-1.5 rounded-full bg-accent shadow-[0_0_6px_var(--color-accent)]"></span>
+            目录
+          </span>
+          <button
+            id="toc-close"
+            type="button"
+            aria-label="关闭目录"
+            class="grid place-items-center size-6 rounded-full text-foreground/50 hover:text-accent hover:bg-accent/10 transition-colors"
+          >
+            <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+
+        <!-- 面板内容 -->
+        <nav class="overflow-y-auto p-2.5 pb-3" id="toc-list">
+          <!-- 树形列表（服务端渲染） -->
+          <div set:html={treeHtml}></div>
+
+          <!-- 分割线 -->
+          <div class="mx-3 my-2 h-px bg-border/20"></div>
+
+          <!-- 固定「评论」导航项 -->
+          <a
+            href="#comments"
+            class="toc-row toc-comment-item"
+            data-toc-comment
+          >
+            <span class="toc-dot hollow" aria-hidden="true"></span>
+            <span class="text-foreground/70 text-sm hover:text-accent transition-colors">
+              💬 评论
+            </span>
+          </a>
+        </nav>
+      </div>
     </div>
-    <nav class="toc-body" id="toc-list" aria-label="目录列表"></nav>
-  </div>
-</div>
 
-<style>
-  .toc-root {
-    position: fixed;
-    right: 1.1rem;
-    bottom: 1.1rem;
-    z-index: 90;
-    pointer-events: none;
-  }
-  .toc-root:not([hidden]) {
-    pointer-events: auto;
-  }
+    <style>
+      /* ═══ 树形条目样式 ═══ */
 
-  /* ── 浮动按钮 ── */
-  .toc-fab {
-    position: relative;
-    display: grid;
-    place-items: center;
-    width: 3rem;
-    height: 3rem;
-    border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
-    background: color-mix(in srgb, var(--background) 82%, transparent);
-    backdrop-filter: blur(14px) saturate(160%);
-    -webkit-backdrop-filter: blur(14px) saturate(160%);
-    color: var(--foreground);
-    box-shadow: 0 10px 30px -12px color-mix(in srgb, var(--accent) 30%, transparent);
-    cursor: pointer;
-    transition:
-      border-color 0.2s,
-      color 0.2s,
-      transform 0.25s cubic-bezier(0.34, 1.4, 0.5, 1),
-      box-shadow 0.2s;
-  }
-  .toc-fab:hover,
-  .toc-fab[aria-expanded="true"] {
-    color: var(--accent);
-    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-    transform: translateY(-2px);
-    box-shadow: 0 14px 36px -12px color-mix(in srgb, var(--accent) 45%, transparent);
-  }
-  .toc-fab-icon {
-    width: 1.25rem;
-    height: 1.25rem;
-  }
-  .toc-fab-dot {
-    position: absolute;
-    top: 0.45rem;
-    right: 0.45rem;
-    width: 0.4rem;
-    height: 0.4rem;
-    border-radius: 999px;
-    background: var(--accent);
-    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 70%, transparent);
-    opacity: 0;
-    transition: opacity 0.25s;
-  }
-  .toc-fab-dot.is-active {
-    opacity: 1;
-  }
-
-  /* ── 面板 ── */
-  .toc-panel {
-    position: absolute;
-    right: 0;
-    bottom: calc(100% + 0.7rem);
-    width: min(72vw, 19.5rem);
-    max-height: min(64vh, 27rem);
-    display: flex;
-    flex-direction: column;
-    border: 1px solid color-mix(in srgb, var(--border) 35%, transparent);
-    background: color-mix(in srgb, var(--background) 90%, var(--background));
-    backdrop-filter: blur(20px) saturate(170%);
-    -webkit-backdrop-filter: blur(20px) saturate(170%);
-    border-radius: 1rem;
-    box-shadow: 0 24px 70px -28px color-mix(in srgb, var(--accent) 40%, transparent);
-    overflow: hidden;
-    transform-origin: bottom right;
-    animation: toc-in 0.22s cubic-bezier(0.34, 1.4, 0.5, 1);
-  }
-  @keyframes toc-in {
-    from {
-      opacity: 0;
-      transform: translateY(0.6rem) scale(0.96);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-  .toc-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-    padding: 0.7rem 0.85rem;
-    border-bottom: 1px dashed color-mix(in srgb, var(--border) 30%, transparent);
-    flex-shrink: 0;
-  }
-  .toc-title {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.875rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    color: var(--foreground);
-  }
-  .toc-title::before {
-    content: "";
-    width: 0.45rem;
-    height: 0.45rem;
-    border-radius: 999px;
-    background: var(--accent);
-    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
-  }
-  .toc-close {
-    display: grid;
-    place-items: center;
-    width: 1.6rem;
-    height: 1.6rem;
-    border-radius: 0.5rem;
-    border: 0;
-    background: transparent;
-    color: color-mix(in srgb, var(--foreground) 55%, transparent);
-    cursor: pointer;
-    transition: color 0.18s, background-color 0.18s;
-  }
-  .toc-close:hover {
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
-  }
-  .toc-close svg {
-    width: 0.9rem;
-    height: 0.9rem;
-  }
-  .toc-body {
-    overflow-y: auto;
-    padding: 0.5rem 0.55rem 0.7rem;
-    scrollbar-width: thin;
-    scrollbar-color:
-      color-mix(in srgb, var(--accent) 30%, transparent)
-      transparent;
-  }
-  .toc-body::-webkit-scrollbar {
-    width: 5px;
-  }
-  .toc-body::-webkit-scrollbar-thumb {
-    background: color-mix(in srgb, var(--accent) 28%, transparent);
-    border-radius: 10px;
-  }
-
-  /* ── 树形项 ── */
-  .toc-item {
-    margin-bottom: 1px;
-  }
-  .toc-row {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    border-radius: 0.55rem;
-    padding: 0.15rem 0.25rem 0.15rem 0.4rem;
-    transition: background-color 0.18s;
-  }
-  .toc-row:hover {
-    background: color-mix(in srgb, var(--accent) 6%, transparent);
-  }
-
-  /* 折叠按钮 / 占位 */
-  .toc-toggle {
-    flex-shrink: 0;
-    display: grid;
-    place-items: center;
-    width: 1.15rem;
-    height: 1.15rem;
-    border: 0;
-    background: transparent;
-    color: color-mix(in srgb, var(--foreground) 45%, transparent);
-    cursor: pointer;
-    border-radius: 0.3rem;
-    transition: color 0.18s, background-color 0.18s, transform 0.25s;
-    padding: 0;
-  }
-  .toc-toggle:hover {
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-  }
-  .toc-toggle svg {
-    width: 0.7rem;
-    height: 0.7rem;
-  }
-  /* 折叠态：箭头朝右 */
-  .toc-item.is-collapsed > .toc-row .toc-toggle svg {
-    transform: rotate(-90deg);
-  }
-  .toc-spacer {
-    flex-shrink: 0;
-    width: 1.15rem;
-    height: 1.15rem;
-    display: inline-block;
-  }
-
-  /* 子列表 + 引导线 */
-  .toc-children {
-    position: relative;
-    margin-left: 0.78rem;
-    padding-left: 0.55rem;
-  }
-  .toc-children::before {
-    content: "";
-    position: absolute;
-    left: 0.35rem;
-    top: 0.15rem;
-    bottom: 0.15rem;
-    width: 1px;
-    background: color-mix(in srgb, var(--border) 45%, transparent);
-    border-radius: 1px;
-  }
-  .toc-item.is-collapsed > .toc-children {
-    display: none;
-  }
-
-  /* 链接本身 */
-  .toc-link {
-    flex: 1;
-    min-width: 0;
-    display: block;
-    padding: 0.3rem 0.55rem;
-    border-radius: 0.5rem;
-    font-size: 0.82rem;
-    line-height: 1.45;
-    color: color-mix(in srgb, var(--foreground) 72%, transparent);
-    text-decoration: none;
-    border-left: 2px solid transparent;
-    transition: color 0.18s, border-color 0.18s;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  /* ── 层级样式 ── */
-  /* h2：主章节 */
-  .toc-l2 > .toc-row .toc-link {
-    font-size: 0.85rem;
-    font-weight: 650;
-    color: var(--foreground);
-    padding-top: 0.36rem;
-    padding-bottom: 0.36rem;
-  }
-  .toc-l2 > .toc-row .toc-link.is-active {
-    color: var(--accent);
-    border-left-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 10%, transparent);
-  }
-  /* h3：子章节 */
-  .toc-l3 > .toc-row .toc-link {
-    font-size: 0.78rem;
-    font-weight: 500;
-    color: color-mix(in srgb, var(--foreground) 65%, transparent);
-  }
-  .toc-l3 > .toc-row .toc-link.is-active {
-    color: var(--accent);
-    border-left-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
-    font-weight: 600;
-  }
-  /* h4：子子章节 */
-  .toc-l4 > .toc-row .toc-link {
-    font-size: 0.72rem;
-    font-weight: 400;
-    color: color-mix(in srgb, var(--foreground) 50%, transparent);
-    padding: 0.24rem 0.5rem;
-  }
-  .toc-l4 > .toc-row .toc-link.is-active {
-    color: var(--accent);
-    border-left-color: var(--accent);
-    font-weight: 500;
-  }
-
-  /* 祖先链路弱化但可见 */
-  .toc-item.is-ancestor > .toc-row .toc-link {
-    color: color-mix(in srgb, var(--foreground) 55%, transparent);
-  }
-
-  /* 滚动到顶时顶部留白 */
-  .toc-body {
-    scroll-behavior: smooth;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .toc-panel {
-      animation: none;
-    }
-    .toc-toggle svg {
-      transition: none;
-    }
-  }
-
-  /* 移动端：面板宽一些 */
-  @media (max-width: 640px) {
-    .toc-root {
-      right: 0.7rem;
-      bottom: 0.7rem;
-    }
-    .toc-panel {
-      width: min(82vw, 17rem);
-      max-height: 56vh;
-    }
-  }
-</style>
-
-<script>
-  // ═══ 目录：扫描 #main-content 标题，右下角浮动展开 ═══
-  let tocCleanup: AbortController | null = null;
-
-  document.addEventListener("astro:page-load", () => {
-    if (tocCleanup) tocCleanup.abort();
-    tocCleanup = new AbortController();
-    const { signal } = tocCleanup;
-
-    const root = document.getElementById("toc-button-root");
-    const fab = document.getElementById("toc-fab");
-    const panel = document.getElementById("toc-panel");
-    const list = document.getElementById("toc-list");
-    const closeBtn = document.querySelector(".toc-close");
-    const dot = fab?.querySelector(".toc-fab-dot");
-    if (!root || !fab || !panel || !list) return;
-
-    const main = document.getElementById("main-content");
-    const headings = Array.from(
-      (main ?? document).querySelectorAll<HTMLElement>("h2, h3, h4")
-    );
-    if (headings.length < 2) {
-      root.hidden = true;
-      return;
-    }
-
-    // ── 为标题补 id ──
-    headings.forEach((h, i) => {
-      if (!h.id) h.id = `toc-h-${i}`;
-    });
-
-    // ── 构建树 ──
-    type Node = { h: HTMLElement; level: number; children: Node[] };
-    const tree: Node[] = [];
-    const stack: Node[] = [];
-    for (const h of headings) {
-      const level = Number(h.tagName.charAt(1));
-      const node: Node = { h, level, children: [] };
-      while (stack.length && stack[stack.length - 1].level >= level) {
-        stack.pop();
+      /* 条目行 */
+      .toc-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.3rem 0.55rem;
+        border-radius: 0.5rem;
+        border-left: 2px solid transparent;
+        transition: background-color 0.18s, border-color 0.18s;
+        cursor: pointer;
       }
-      if (stack.length) stack[stack.length - 1].children.push(node);
-      else tree.push(node);
-      stack.push(node);
-    }
+      .toc-row:hover {
+        background: color-mix(in srgb, var(--color-accent) 7%, transparent);
+      }
 
-    // ── 渲染嵌套 ──
-    const chevron =
-      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
-    const render = (nodes: Node[]): string =>
-      nodes
-        .map((n) => {
-          const hasKids = n.children.length > 0;
-          return `<div class="toc-item toc-l${n.level}">
-            <div class="toc-row">
-              ${hasKids ? `<button class="toc-toggle" data-toggle aria-label="折叠">${chevron}</button>` : '<span class="toc-spacer"></span>'}
-              <a href="#${n.h.id}" class="toc-link" data-toc-link data-id="${n.h.id}">${escapeHtml(n.h.textContent?.trim() || "")}</a>
-            </div>
-            ${hasKids ? `<div class="toc-children">${render(n.children)}</div>` : ""}
-          </div>`;
-        })
-        .join("");
+      /* 圆点标记 */
+      .toc-dot {
+        flex-shrink: 0;
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 9999px;
+        transition: transform 0.2s, background-color 0.2s, border-color 0.2s;
+      }
+      .toc-dot.solid {
+        background: var(--color-accent);
+        box-shadow: 0 0 6px color-mix(in srgb, var(--color-accent) 50%, transparent);
+      }
+      .toc-dot.hollow {
+        border: 2px solid var(--color-accent);
+        background: transparent;
+      }
 
-    const escapeHtml = (s: string) =>
-      s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+      /* 标题链接 */
+      .toc-link {
+        flex: 1;
+        min-width: 0;
+        text-decoration: none;
+        color: color-mix(in srgb, var(--color-foreground) 72%, transparent);
+        font-size: 0.8rem;
+        line-height: 1.4;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        transition: color 0.18s;
+      }
+      .toc-link:hover {
+        color: var(--color-accent);
+      }
 
-    list.innerHTML = render(tree);
+      /* 层级字号与字重 */
+      .toc-node[data-depth="2"] > .toc-row .toc-link {
+        font-size: 0.82rem;
+        font-weight: 650;
+        color: var(--color-foreground);
+      }
+      .toc-node[data-depth="3"] > .toc-row .toc-link {
+        font-size: 0.76rem;
+        font-weight: 500;
+      }
+      .toc-node[data-depth="4"] > .toc-row .toc-link,
+      .toc-node[data-depth="5"] > .toc-row .toc-link {
+        font-size: 0.72rem;
+        font-weight: 400;
+        color: color-mix(in srgb, var(--color-foreground) 55%, transparent);
+      }
 
-    const links = Array.from(list.querySelectorAll<HTMLAnchorElement>("[data-toc-link]"));
-    if (!links.length) {
-      root.hidden = true;
-      return;
-    }
+      /* 子列表：垂直引导线 + 缩进 */
+      .toc-children {
+        margin-left: 7px;
+        padding-left: 16px;
+        border-left: 1px solid color-mix(in srgb, var(--color-border) 45%, transparent);
+      }
 
-    root.hidden = false;
+      /* 激活态：整行高亮 + 文字加粗 */
+      .toc-row.is-active {
+        background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+        border-left-color: var(--color-accent);
+      }
+      .toc-row.is-active .toc-link {
+        color: var(--color-accent);
+        font-weight: 600;
+      }
+      .toc-row.is-active .toc-dot.hollow {
+        background: var(--color-accent);
+        border-color: var(--color-accent);
+      }
 
-    // ── 折叠/展开 ──
-    list.addEventListener(
-      "click",
-      (e) => {
-        const btn = (e.target as HTMLElement).closest("[data-toggle]");
-        if (!btn) return;
-        const item = btn.closest(".toc-item") as HTMLElement;
-        if (!item) return;
-        item.classList.toggle("is-collapsed");
-      },
-      { signal }
-    );
+      /* 祖先链路弱化 */
+      .toc-node.is-ancestor > .toc-row .toc-link {
+        color: color-mix(in srgb, var(--color-foreground) 50%, transparent);
+      }
 
-    // ── 点击目录项：平滑滚动 + 关闭面板 ──
-    const close = () => {
-      panel.hidden = true;
-      fab.setAttribute("aria-expanded", "false");
-      fab.setAttribute("aria-label", "打开目录");
-      root.classList.remove("is-open");
-    };
-    const open = () => {
-      panel.hidden = false;
-      fab.setAttribute("aria-expanded", "true");
-      fab.setAttribute("aria-label", "关闭目录");
-      root.classList.add("is-open");
-    };
+      /* 评论条目 */
+      .toc-comment-item {
+        font-size: 0.8rem;
+      }
 
-    list.addEventListener(
-      "click",
-      (e) => {
-        const link = (e.target as HTMLElement).closest<HTMLElement>("[data-toc-link]");
-        if (!link) return;
-        e.preventDefault();
-        const id = link.getAttribute("data-id");
-        const target = id ? document.getElementById(id) : null;
-        if (target) {
-          target.scrollIntoView({ behavior: "smooth", block: "start" });
-          history.replaceState(null, "", `#${id}`);
+      /* 滚动条 */
+      #toc-list {
+        scrollbar-width: thin;
+        scrollbar-color: color-mix(in srgb, var(--color-accent) 30%, transparent) transparent;
+      }
+      #toc-list::-webkit-scrollbar {
+        width: 4px;
+      }
+      #toc-list::-webkit-scrollbar-thumb {
+        background: color-mix(in srgb, var(--color-accent) 28%, transparent);
+        border-radius: 10px;
+      }
+
+      /* 面板入场动画 */
+      #toc-panel:not([hidden]) {
+        animation: toc-panel-in 0.22s cubic-bezier(0.34, 1.4, 0.5, 1);
+        transform-origin: bottom right;
+      }
+      @keyframes toc-panel-in {
+        from {
+          opacity: 0;
+          transform: translateY(0.6rem) scale(0.96);
         }
-        close();
-      },
-      { signal }
-    );
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
 
-    // ── 滚动高亮 + 自动展开祖先 ──
-    const setActive = (id: string) => {
-      links.forEach((l) => {
-        l.classList.toggle("is-active", l.getAttribute("data-id") === id);
-      });
-      // 展开祖先链路
-      const activeLink = list.querySelector<HTMLElement>(`[data-toc-link][data-id="${id}"]`);
-      list.querySelectorAll(".toc-item.is-ancestor").forEach((el) =>
-        el.classList.remove("is-ancestor")
-      );
-      if (activeLink) {
-        let el = activeLink.parentElement?.parentElement as HTMLElement | null;
-        while (el && el !== list) {
-          if (el.classList.contains("toc-item")) {
-            el.classList.remove("is-collapsed");
-            if (el !== activeLink.closest(".toc-item")) {
-              el.classList.add("is-ancestor");
+      @media (prefers-reduced-motion: reduce) {
+        #toc-panel:not([hidden]) {
+          animation: none;
+        }
+      }
+
+      /* 移动端面板宽度 */
+      @media (max-width: 640px) {
+        #toc-panel {
+          max-height: 52vh;
+        }
+      }
+    </style>
+
+    <script>
+      // ═══ 客户端交互：弹窗开关、滚动高亮、平滑滚动 ═══
+      let tocCleanup: AbortController | null = null;
+
+      document.addEventListener("astro:page-load", () => {
+        if (tocCleanup) tocCleanup.abort();
+        tocCleanup = new AbortController();
+        const { signal } = tocCleanup;
+
+        const fab = document.getElementById("toc-fab");
+        const panel = document.getElementById("toc-panel");
+        const list = document.getElementById("toc-list");
+        const closeBtn = document.getElementById("toc-close");
+        if (!fab || !panel || !list) return;
+
+        const open = () => {
+          panel.classList.remove("hidden");
+          panel.classList.add("flex");
+          fab.setAttribute("aria-expanded", "true");
+          fab.setAttribute("aria-label", "关闭目录");
+        };
+        const close = () => {
+          panel.classList.add("hidden");
+          panel.classList.remove("flex");
+          fab.setAttribute("aria-expanded", "false");
+          fab.setAttribute("aria-label", "打开目录");
+        };
+
+        // 浮动按钮开关
+        fab.addEventListener(
+          "click",
+          (e) => {
+            e.stopPropagation();
+            panel.classList.contains("hidden") ? open() : close();
+          },
+          { signal }
+        );
+        closeBtn?.addEventListener("click", close, { signal });
+
+        // 点击面板外部关闭
+        document.addEventListener(
+          "click",
+          (e) => {
+            if (!panel.classList.contains("hidden")) {
+              const fabContainer = document.getElementById("toc-fab-container");
+              if (fabContainer && !fabContainer.contains(e.target as HTMLElement)) {
+                close();
+              }
+            }
+          },
+          { signal }
+        );
+
+        // ESC 关闭
+        document.addEventListener(
+          "keydown",
+          (e) => {
+            if (e.key === "Escape" && !panel.classList.contains("hidden")) close();
+          },
+          { signal }
+        );
+
+        // 点击目录项：平滑滚动 + 关闭面板
+        list.addEventListener(
+          "click",
+          (e) => {
+            const target = e.target as HTMLElement;
+            const commentLink = target.closest("[data-toc-comment]");
+            const tocLink = target.closest<HTMLElement>("[data-slug]");
+
+            let id: string | null = null;
+            if (commentLink) {
+              id = "comments";
+            } else if (tocLink) {
+              id = tocLink.getAttribute("data-slug");
+            }
+            if (!id) return;
+
+            e.preventDefault();
+            const el = document.getElementById(id);
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth", block: "start" });
+              history.replaceState(null, "", `#${id}`);
+            }
+            close();
+          },
+          { signal }
+        );
+
+        // ── 滚动高亮 + 自动展开祖先 ──
+        const allLinks = list.querySelectorAll<HTMLElement>("[data-slug]");
+        const nodes = list.querySelectorAll<HTMLElement>(".toc-node");
+        const headingMap = new Map<string, HTMLElement>();
+        allLinks.forEach((l) => {
+          const id = l.getAttribute("data-slug");
+          if (id) {
+            const h = document.getElementById(id);
+            if (h) headingMap.set(id, h);
+          }
+        });
+
+        const setActive = (id: string) => {
+          allLinks.forEach((l) => {
+            l.closest(".toc-row")?.classList.toggle(
+              "is-active",
+              l.getAttribute("data-slug") === id
+            );
+          });
+          nodes.forEach((n) => n.classList.remove("is-ancestor"));
+
+          // 展开祖先链路
+          const activeRow = list.querySelector<HTMLElement>(
+            `[data-slug="${id}"]`
+          )?.closest(".toc-row");
+          if (activeRow) {
+            let el = activeRow.parentElement?.parentElement as HTMLElement | null;
+            while (el && el !== list) {
+              if (el.classList.contains("toc-node")) {
+                if (el !== activeRow.parentElement?.parentElement) {
+                  el.classList.add("is-ancestor");
+                }
+              }
+              el = el.parentElement;
             }
           }
-          el = el.parentElement;
+        };
+
+        const observer = new IntersectionObserver(
+          (entries) => {
+            const visible = entries
+              .filter((e) => e.isIntersecting)
+              .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+            if (visible.length) {
+              const id = (visible[0].target as HTMLElement).id;
+              setActive(id);
+            }
+          },
+          { rootMargin: "-10% 0px -70% 0px", threshold: 0 }
+        );
+        headingMap.forEach((_, id) => {
+          const el = document.getElementById(id);
+          if (el) observer.observe(el);
+        });
+
+        // 初始激活
+        if (headingMap.size) {
+          const firstId = Array.from(headingMap.keys())[0];
+          setActive(firstId);
         }
-        // 同步 dot
-        if (dot) dot.classList.add("is-active");
-      }
-    };
+      });
+    </script>
 
-    const headingById = new Map(headings.map((h, i) => [h.id, i]));
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible.length) {
-          const h = visible[0].target as HTMLElement;
-          setActive(h.id);
-        }
-      },
-      { rootMargin: "-12% 0px -72% 0px", threshold: 0 }
-    );
-    headings.forEach((h) => observer.observe(h));
-
-    // ── 初始激活 ──
-    if (headings.length) setActive(headings[0].id);
-
-    // ── 打开/关闭 ──
-    fab.addEventListener(
-      "click",
-      () => {
-        panel.hidden ? open() : close();
-      },
-      { signal }
-    );
-    closeBtn?.addEventListener("click", close, { signal });
-    document.addEventListener(
-      "keydown",
-      (e) => {
-        if (e.key === "Escape" && !panel.hidden) close();
-      },
-      { signal }
-    );
-  });
-</script>

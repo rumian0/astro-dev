@@ -313,23 +313,20 @@ const bg = SITE.background;
     object-position: center;
     /* scale 覆盖 blur 边缘，避免露底 */
     transform: scale(var(--bg-scale, 1.08));
-    filter: blur(var(--bg-blur, 24px)) saturate(1.05);
+    filter: blur(var(--bg-blur, 14px)) saturate(1.05);
     will-change: transform;
     /* 固定不重排，避免滚动时重新计算 blur */
     contain: paint;
   }
 
-  /* 小屏 blur 减半：移动端 GPU 预算有限，24px 全屏 blur 是主要卡顿源 */
+  /* 小屏 blur 减半：移动端 GPU 预算有限 */
   @media (max-width: 768px) {
     .site-bg-img {
-      filter: blur(12px) saturate(1);
+      filter: blur(8px) saturate(1);
     }
   }
 
-  /* 滚动时进一步降级：blur 降低 + 玻璃 backdrop-filter 减薄 */
-  body.is-scrolling .site-bg-img {
-    filter: blur(8px) saturate(1);
-  }
+  /* 滚动时仅减薄玻璃 backdrop-filter（背景 blur 保持恒定，避免视觉跳变） */
   body.is-scrolling header,
   body.is-scrolling [data-drawer]:not([hidden]),
   body.is-scrolling aside {

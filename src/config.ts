@@ -41,7 +41,7 @@ export const SITE = {
   /** 全局背景：图库随机图 + 模糊，叠加色保证正文可读 */
   background: {
     image: "https://webp.mingcy.cn",
-    blur: 24,
+    blur: 14,
     scale: 1.08,
     /** 叠加层不透明度（%），越高越不影响阅读 */
     overlayLight: 68,

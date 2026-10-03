@@ -62,7 +62,8 @@ const treeHtml = renderTree(tree);
 
     <div
       id="toc-fab-container"
-      class="pointer-events-none fixed end-4 bottom-24 z-50 transition-[opacity,transform] duration-300 ease-out md:end-8 md:bottom-28 motion-reduce:transition-none"
+      data-open="false"
+      class="pointer-events-none fixed end-4 bottom-24 z-50 md:end-8 md:bottom-28"
     >
       <button
         id="toc-fab"
@@ -104,7 +105,7 @@ const treeHtml = renderTree(tree);
       <!-- ═══ 弹出面板 ═══ -->
       <div
         id="toc-panel"
-        class="pointer-events-auto absolute bottom-full mb-3 end-0 hidden flex-col overflow-hidden rounded-2xl border border-border/30 bg-background/85 shadow-2xl backdrop-blur-xl"
+        class="pointer-events-auto absolute bottom-full mb-3 end-0 flex flex-col overflow-hidden rounded-2xl border border-border/30 bg-background/85 shadow-2xl backdrop-blur-xl"
         style="width: min(72vw, 18rem); max-height: min(60vh, 28rem);"
         role="dialog"
         aria-label="文章目录"
@@ -162,7 +163,9 @@ const treeHtml = renderTree(tree);
         padding: 0.3rem 0.55rem;
         border-radius: 0.5rem;
         border-left: 2px solid transparent;
-        transition: background-color 0.18s, border-color 0.18s;
+        transition:
+          background-color 0.22s ease-out,
+          border-color 0.22s ease-out;
         cursor: pointer;
       }
       .toc-row:hover {
@@ -175,7 +178,10 @@ const treeHtml = renderTree(tree);
         width: 0.5rem;
         height: 0.5rem;
         border-radius: 9999px;
-        transition: transform 0.2s, background-color 0.2s, border-color 0.2s;
+        transition:
+          transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1),
+          background-color 0.22s ease-out,
+          border-color 0.22s ease-out;
       }
       .toc-dot.solid {
         background: var(--color-accent);
@@ -197,7 +203,7 @@ const treeHtml = renderTree(tree);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        transition: color 0.18s;
+        transition: color 0.22s ease-out;
       }
       .toc-link:hover {
         color: var(--color-accent);
@@ -236,6 +242,10 @@ const treeHtml = renderTree(tree);
         color: var(--color-accent);
         font-weight: 600;
       }
+      .toc-row.is-active .toc-dot {
+        transform: scale(1.25);
+        box-shadow: 0 0 8px color-mix(in srgb, var(--color-accent) 70%, transparent);
+      }
       .toc-row.is-active .toc-dot.hollow {
         background: var(--color-accent);
         border-color: var(--color-accent);
@@ -264,25 +274,38 @@ const treeHtml = renderTree(tree);
         border-radius: 10px;
       }
 
-      /* 面板入场动画 */
-      #toc-panel:not([hidden]) {
-        animation: toc-panel-in 0.22s cubic-bezier(0.34, 1.4, 0.5, 1);
+      /* ═══ 面板显隐：可反转的打开 / 关闭过渡（只动 opacity + transform）═══ */
+      #toc-panel {
+        opacity: 0;
+        transform: translateY(0.5rem) scale(0.96);
         transform-origin: bottom right;
+        pointer-events: none;
+        visibility: hidden;
+        transition:
+          opacity 0.18s ease-out,
+          transform 0.24s cubic-bezier(0.34, 1.4, 0.5, 1),
+          visibility 0s linear 0.24s;
       }
-      @keyframes toc-panel-in {
-        from {
-          opacity: 0;
-          transform: translateY(0.6rem) scale(0.96);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0) scale(1);
-        }
+      #toc-fab-container[data-open="true"] #toc-panel {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        pointer-events: auto;
+        visibility: visible;
+        transition:
+          opacity 0.18s ease-out,
+          transform 0.24s cubic-bezier(0.34, 1.4, 0.5, 1),
+          visibility 0s;
       }
 
       @media (prefers-reduced-motion: reduce) {
-        #toc-panel:not([hidden]) {
-          animation: none;
+        #toc-panel,
+        #toc-fab-container[data-open="true"] #toc-panel {
+          transition: visibility 0s;
+        }
+        .toc-row,
+        .toc-dot,
+        .toc-link {
+          transition: none;
         }
       }
 
@@ -304,20 +327,23 @@ const treeHtml = renderTree(tree);
         const { signal } = tocCleanup;
 
         const fab = document.getElementById("toc-fab");
-        const panel = document.getElementById("toc-panel");
+        const fabContainer = document.getElementById("toc-fab-container");
         const list = document.getElementById("toc-list");
         const closeBtn = document.getElementById("toc-close");
-        if (!fab || !panel || !list) return;
+        if (!fab || !fabContainer || !list) return;
 
+        // 滚动高亮刷新钩子（无标题时保持 no-op）
+        let refreshHighlight: () => void = () => {};
+
+        const isOpen = () => fabContainer.getAttribute("data-open") === "true";
         const open = () => {
-          panel.classList.remove("hidden");
-          panel.classList.add("flex");
+          fabContainer.setAttribute("data-open", "true");
           fab.setAttribute("aria-expanded", "true");
           fab.setAttribute("aria-label", "关闭目录");
+          refreshHighlight();
         };
         const close = () => {
-          panel.classList.add("hidden");
-          panel.classList.remove("flex");
+          fabContainer.setAttribute("data-open", "false");
           fab.setAttribute("aria-expanded", "false");
           fab.setAttribute("aria-label", "打开目录");
         };
@@ -327,7 +353,7 @@ const treeHtml = renderTree(tree);
           "click",
           (e) => {
             e.stopPropagation();
-            panel.classList.contains("hidden") ? open() : close();
+            isOpen() ? close() : open();
           },
           { signal }
         );
@@ -337,12 +363,7 @@ const treeHtml = renderTree(tree);
         document.addEventListener(
           "click",
           (e) => {
-            if (!panel.classList.contains("hidden")) {
-              const fabContainer = document.getElementById("toc-fab-container");
-              if (fabContainer && !fabContainer.contains(e.target as HTMLElement)) {
-                close();
-              }
-            }
+            if (isOpen() && !fabContainer.contains(e.target as Node)) close();
           },
           { signal }
         );
@@ -351,7 +372,7 @@ const treeHtml = renderTree(tree);
         document.addEventListener(
           "keydown",
           (e) => {
-            if (e.key === "Escape" && !panel.classList.contains("hidden")) close();
+            if (e.key === "Escape" && isOpen()) close();
           },
           { signal }
         );
@@ -384,64 +405,118 @@ const treeHtml = renderTree(tree);
         );
 
         // ── 滚动高亮 + 自动展开祖先 ──
-        const allLinks = list.querySelectorAll<HTMLElement>("[data-slug]");
-        const nodes = list.querySelectorAll<HTMLElement>(".toc-node");
-        const headingMap = new Map<string, HTMLElement>();
-        allLinks.forEach((l) => {
-          const id = l.getAttribute("data-slug");
-          if (id) {
-            const h = document.getElementById(id);
-            if (h) headingMap.set(id, h);
-          }
-        });
-
-        const setActive = (id: string) => {
-          allLinks.forEach((l) => {
-            l.closest(".toc-row")?.classList.toggle(
-              "is-active",
-              l.getAttribute("data-slug") === id
-            );
-          });
-          nodes.forEach((n) => n.classList.remove("is-ancestor"));
-
-          // 展开祖先链路
-          const activeRow = list.querySelector<HTMLElement>(
-            `[data-slug="${id}"]`
-          )?.closest(".toc-row");
-          if (activeRow) {
-            let el = activeRow.parentElement?.parentElement as HTMLElement | null;
-            while (el && el !== list) {
-              if (el.classList.contains("toc-node")) {
-                if (el !== activeRow.parentElement?.parentElement) {
-                  el.classList.add("is-ancestor");
-                }
-              }
-              el = el.parentElement;
-            }
-          }
+        // 每个条目预缓存「对应行 / 严格祖先 toc-node / 文档内绝对 top」，
+        // 滚动时只做常量级类名切换，不再反复 querySelector / closest
+        type TocItem = {
+          id: string;
+          heading: HTMLElement;
+          row: HTMLElement;
+          ancestors: HTMLElement[];
+          top: number;
         };
+        const items: TocItem[] = [];
+        list.querySelectorAll<HTMLElement>("[data-slug]").forEach((link) => {
+          const id = link.getAttribute("data-slug");
+          const heading = id ? document.getElementById(id) : null;
+          const row = link.closest<HTMLElement>(".toc-row");
+          if (!id || !heading || !row) return;
 
-        const observer = new IntersectionObserver(
-          (entries) => {
-            const visible = entries
-              .filter((e) => e.isIntersecting)
-              .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-            if (visible.length) {
-              const id = (visible[0].target as HTMLElement).id;
-              setActive(id);
+          // 收集严格祖先的 .toc-node（跳过自身所在的那一层）
+          const ancestors: HTMLElement[] = [];
+          let own = false;
+          let el = row.parentElement;
+          while (el && el !== list) {
+            if (el.classList.contains("toc-node")) {
+              if (own) ancestors.push(el);
+              else own = true;
             }
-          },
-          { rootMargin: "-10% 0px -70% 0px", threshold: 0 }
-        );
-        headingMap.forEach((_, id) => {
-          const el = document.getElementById(id);
-          if (el) observer.observe(el);
+            el = el.parentElement;
+          }
+          items.push({ id, heading, row, ancestors, top: 0 });
         });
 
-        // 初始激活
-        if (headingMap.size) {
-          const firstId = Array.from(headingMap.keys())[0];
-          setActive(firstId);
+        if (items.length) {
+          // 探测线：视口顶部往下 18%，标题越过此线即算当前章节
+          const PROBE_RATIO = 0.18;
+          let rafId = 0;
+          let active: TocItem | null = null;
+
+          const measure = () => {
+            items.forEach((it) => {
+              it.top = it.heading.getBoundingClientRect().top + window.scrollY;
+            });
+            items.sort((a, b) => a.top - b.top);
+          };
+
+          const activate = (it: TocItem) => {
+            if (active && active !== it) {
+              active.row.classList.remove("is-active");
+              active.ancestors.forEach((n) => n.classList.remove("is-ancestor"));
+            }
+            it.row.classList.add("is-active");
+            it.ancestors.forEach((n) => n.classList.add("is-ancestor"));
+            active = it;
+          };
+
+          const scheduleUpdate = () => {
+            if (rafId) return;
+            rafId = requestAnimationFrame(() => {
+              rafId = 0;
+              const probe = window.scrollY + window.innerHeight * PROBE_RATIO;
+              let current = items[0];
+              for (const it of items) {
+                if (it.top <= probe) current = it;
+                else break;
+              }
+              // 滚到底部固定最后一节
+              if (
+                window.innerHeight + window.scrollY >=
+                document.documentElement.scrollHeight - 2
+              ) {
+                current = items[items.length - 1];
+              }
+              if (current !== active) activate(current);
+            });
+          };
+
+          let resizeRaf = 0;
+          const reMeasure = () => {
+            if (resizeRaf) return;
+            resizeRaf = requestAnimationFrame(() => {
+              resizeRaf = 0;
+              measure();
+              scheduleUpdate();
+            });
+          };
+
+          refreshHighlight = () => {
+            measure();
+            scheduleUpdate();
+          };
+
+          measure();
+          scheduleUpdate();
+
+          // 滚动 / 尺寸变化 / 字体与图片加载导致布局重排时都要跟上
+          window.addEventListener("scroll", scheduleUpdate, {
+            passive: true,
+            signal,
+          });
+          window.addEventListener("resize", reMeasure, {
+            passive: true,
+            signal,
+          });
+          if (document.fonts) {
+            document.fonts.ready.then(reMeasure).catch(() => {});
+          }
+          document
+            .getElementById("main-content")
+            ?.querySelectorAll("img")
+            .forEach((img) => {
+              if (!img.complete) {
+                img.addEventListener("load", reMeasure, { signal, once: true });
+              }
+            });
         }
       });
     </script>

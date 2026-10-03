@@ -272,6 +272,35 @@ hideEditPost: false
 
 ---
 
+## 🔧 排障记录 Troubleshooting
+
+### `.astro` 报 `Unexpected ","`，但 `astro check` 全绿
+
+**现象**：`astro dev` / `astro build` 报
+
+```
+[ERROR] Unexpected ","
+  Stack trace:
+    at .../src/components/Xxx.astro:110:1
+```
+
+但 `astro check` 显示 0 错误，且报错行号指向的是一行完全正常的模板 HTML。
+
+**根因**：`astro check` 走 TypeScript / Volar 解析器，**带容错恢复**——比如某个 `function` 少了闭合花括号，它会静默地把后续语句当成函数体的一部分，于是全绿；而构建走 esbuild，严格解析，直接报错。
+
+更坑的是**报错位置会被误导**：未闭合的 `function` 会吞掉后面的 `return $$render\`...\``，导致本该关闭外层箭头函数的那个 `}` 先关掉了内层函数，esbuild 便在该函数体里撞到下一个逗号。
+
+**定位方法**：别信行号，直接用 Astro 编译器复现产物再喂给 esbuild：
+
+```bash
+node -e \
+"const fs=require('fs');const{transform}=require('@astrojs/compiler');\nconst esbuild=require('esbuild');\ntransform(fs.readFileSync('src/components/TocButton.astro','utf8'),{filename:'TocButton.astro'})\n.then(r=>esbuild.transformSync(r.code,{loader:'ts'}));"
+```
+
+`esbuild` 抛出的行号才是真位置。2026-10 的 `TocButton.astro` 就是这样查出 `renderTree()` 缺一个 `}` 的。
+
+---
+
 ## 📜 许可协议
 
 基于 [AstroPaper](https://github.com/satnaing/astro-paper)（作者 [Sat Naing](https://satnaing.dev)），MIT 许可。
@@ -331,12 +360,13 @@ hideEditPost: false
 - 移除「精选」区块（默认只展示最新文章）
 - 文案更新：「INFJ-T | 学生 | 网络安全爱好者 | 茶香四溢·编程世界。记录编程、网络安全与生活的点滴。」
 
-#### 6. 目录 TOC（全站）
+#### 6. 目录 TOC
 
-- 新组件 `src/components/TocButton.astro`，挂在全局 Layout，**每个页面生效**
-- 右下角圆形浮动图标 → 点击向上展开目录面板
-- 自动扫描 `#main-content` 的 h2/h3，滚动高亮当前章节（IntersectionObserver）
-- 标题少于 2 个自动隐藏；ESC / 点击空白关闭
+- 新组件 `src/components/TocButton.astro`，挂在 `PostDetails.astro`，**仅文章页生效**
+- 右下角圆形浮动按钮 → 点击向上弹出目录面板（底部固定「评论」导航项）
+- 服务端用 `astro:content` 的 `render()` 返回的 `headings` 构建标题树（非扫描 DOM）
+- 滚动高亮基于 rAF 节流的滚动位置探测线，**不是 IntersectionObserver**
+- ESC / 点击面板外部关闭
 
 #### 7. 移动端优化
 
@@ -358,4 +388,21 @@ hideEditPost: false
 - **apple-touch-icon**：2.5 MB × 2 → **50 KB × 2**（sharp 裁切缩放至 180×180，iOS 标准尺寸）
 - **Fancybox 189 KB + HeoLivePhoto 11 KB 按需懒加载**：`Layout.astro` 不再全局注入，改为 `live-gallery.ts` 的 `ensureFancybox()` / `ensureHeoLivePhoto()` 运行时检测——仅当页面存在 `[data-fancybox]` 或 `img[data-live-pvt]` 等元素时才注入 CSS + JS，其他页面零开销
 - **背景卡顿优化**：全局背景大图 `filter: blur(24px)` 是主要卡顿源——移动端降至 **12px**，滚动期间进一步降至 **8px**，并同步将 header / 抽屉 / 侧边栏的 `backdrop-filter` 减薄至 6px（`body.is-scrolling` 状态驱动，120ms 防抖）
+
+#### 11. 目录 TOC 交互打磨（2026-10-03）
+
+- **高亮延迟修复**：原用 `IntersectionObserver` + `rootMargin: "-10% 0px -70% 0px"`，
+  检测带只有约 20% 视口高，整段标题落在带内时不触发回调，快滚时高亮明显滞后；
+  改为 rAF 节流的滚动位置探测线（视口顶部往下 18%），滚到哪跟到哪
+- **高亮性能**：`setActive` 原先每次触发都对全部条目跑 `querySelectorAll` + `closest`
+  并逐条重算祖先链路；改为初始化时预缓存「对应行 / 严格祖先 toc-node / 绝对 top」，
+  切换时只做常量级类名操作
+- **面板动画**：原来靠切换 `hidden` / `flex` 类 + `@keyframes`，只能做打开动画、关闭瞬跳，
+  且动画规则 `:not([hidden])` 选的是**属性**而代码切的是**类名**，两者永不匹配；
+  改为 `data-open` 驱动 `visibility + opacity + transform` 过渡，开关闭都能动画，
+  并用 `visibility` 延迟切换保证关闭后不可交互
+- **激活态微交互**：圆点激活时 `scale(1.25)` + 发光，各条过渡统一改 `ease-out`
+- **补偿性测量**：字体加载（`document.fonts.ready`）与正文图片加载后重新测量标题位置
+- **修复构建失败**：`renderTree()` 缺一个闭合花括号，esbuild 报 `Unexpected ","`，
+  详见上方「排障记录」
 - **搜索脚本说明**：`SearchModal.astro…lang.js` 仅 **2.8 KB**、`preload-helper…js` 仅 **1.25 KB**，本身极小；真正的大块 **Pagefind UI 94 KB**（`ui-core…js`）是打开搜索弹层时才加载的动态 chunk，不影响首屏

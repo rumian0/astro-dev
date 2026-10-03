@@ -26,7 +26,9 @@ export default defineConfig({
   site: SITE.website,
   prefetch: {
     prefetchAll: true,
-    defaultStrategy: "hover",
+    // viewport：页面可见范围内的链接在页面加载时即预取，点击跳转近乎即时。
+    // 原 "hover" 需先悬停才预取，直接点击时仍要现抓整页 HTML，观感上很卡。
+    defaultStrategy: "viewport",
   },
   integrations: [
     react(),

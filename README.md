@@ -360,13 +360,24 @@ node -e \
 - 移除「精选」区块（默认只展示最新文章）
 - 文案更新：「INFJ-T | 学生 | 网络安全爱好者 | 茶香四溢·编程世界。记录编程、网络安全与生活的点滴。」
 
-#### 6. 目录 TOC
+#### 6. 目录 TOC（HUD 风格）
 
 - 新组件 `src/components/TocButton.astro`，挂在 `PostDetails.astro`，**仅文章页生效**
-- 右下角圆形浮动按钮 → 点击向上弹出目录面板（底部固定「评论」导航项）
-- 服务端用 `astro:content` 的 `render()` 返回的 `headings` 构建标题树（非扫描 DOM）
-- 滚动高亮基于 rAF 节流的滚动位置探测线，**不是 IntersectionObserver**
-- ESC / 点击面板外部关闭
+- 右下角圆形浮动按钮 → 点击向上弹出 **HUD 目录面板**（底部固定「评论」导航项）
+- 服务端用 `astro:content` 的 `render()` 返回的 `headings` 构建标题树（非扫描 DOM），
+  并把 **h1 归一化为 h2**（部分文章正文带 h1，否则紧随的 h2 会被错误挂成 h1 的子节点）
+- **共享指示条**：一条发光 accent 竖条在条目间做弹簧位移（`transform` + `height` 过渡），
+  复刻 gyoza 的 framer-motion `layoutId` 效果，但**零新增 JS 依赖**
+- 面板头部有**当前章节读数**（`01 / 08`，Fira Code 等宽数字 + accent 发光）与
+  **阅读进度条**（填充宽度 + 百分比实时刷新）
+- **层级轨道**：子列表 dashed 竖线区分层级，激活路径上的轨道与刻度变 accent 发光
+- **条目弱化 + hover 显现**：默认 opacity 0.5，hover 面板提到 0.95，激活项 1.0
+- 滚动高亮基于 **rAF 节流的滚动位置探测线**（视口顶部往下 18%），**不是 IntersectionObserver**；
+  激活项自动 `scrollIntoView({ block: 'nearest' })` 滚进面板可见区
+- FAB 图标在面板打开时旋转 90°，`title` 实时显示当前章节名
+- ESC / 点击面板外部关闭；`prefers-reduced-motion` 下全部动效降级为直跳
+- 参考：`astro-gyoza/src/components/post/PostToc.tsx`（`layoutId` 共享指示条）、
+  blog.liushen.fun 的 sidebar-toc（app-card-glow 发光卡片）
 
 #### 7. 移动端优化
 
@@ -406,3 +417,28 @@ node -e \
 - **修复构建失败**：`renderTree()` 缺一个闭合花括号，esbuild 报 `Unexpected ","`，
   详见上方「排障记录」
 - **搜索脚本说明**：`SearchModal.astro…lang.js` 仅 **2.8 KB**、`preload-helper…js` 仅 **1.25 KB**，本身极小；真正的大块 **Pagefind UI 94 KB**（`ui-core…js`）是打开搜索弹层时才加载的动态 chunk，不影响首屏
+
+#### 12. 目录 TOC 重写为 HUD 风格（2026-10-03）
+
+- **共享指示条**（本版本最大变化）：新增 `.toc-indicator` —— 一条发光 accent 竖条，
+  章节切换时用 `transform: translate(x, y)` + `height` 双属性过渡在条目间**弹簧位移**，
+  同时贴合条目的行内缩进与高度。效果等同 gyoza 的 framer-motion `layoutId`，
+  但用纯 CSS 过渡实现，**零新增 JS 依赖**（本项目无 React 运行时）
+- **发光卡片外壳**：面板改为 app-card-glow 风格 —— 扫描线纹理背景
+  （`repeating-linear-gradient`）+ 多层 accent 辉光阴影 + 顶部渐变光带 `.toc-beam`
+- **实时读数**：面板头部新增当前章节 `01 / 08`（Fira Code + `tabular-nums` 等宽数字，
+  防跳字）与阅读进度条（填充宽度 + 百分比），随滚动同步刷新
+- **层级轨道**：`.toc-children` 的 dashed 竖线在祖先链路上变 accent；
+  `.toc-row::before` 伪元素刻度在激活项让位给共享指示条（同时省掉一层 DOM，
+  移除上一版的 `.toc-dot` 圆点方案）
+- **h1 归一化**：正文带 h1 的文章（如 `123-liuliang`，实测 2×h1 + 4×h2 + 3×h3）
+  此前会把 h2 错误挂成 h1 的子节点，现统一 `depth = Math.max(2, h.depth)`，
+  顶层标题全部成为同级兄弟
+- **补偿性测量**：字体加载（`document.fonts.ready`）与正文图片 `load` 后重算
+  标题绝对位置与指示条坐标
+- **坐标系选型**：指示条用 `offsetLeft` / `offsetTop`（基于布局，不受面板
+  `scale(0.96)` 变换影响），避免关闭态测量漂移；滚动位置仍用
+  `getBoundingClientRect().top + scrollY`
+- **验证**：`astro check` 0 错误；`@astrojs/compiler` + esbuild 直验通过；
+  dev 实机 grep 确认 9/9 toc slug 全部命中正文 DOM id（高亮前提成立），
+  `IntersectionObserver` 计数为 0

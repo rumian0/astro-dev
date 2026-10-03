@@ -323,71 +323,119 @@ const techGrid = [
     width: 0;
     height: 0;
   }
-  /* ═══ 目录卡片（文章页）═══ */
-  .toc-sidebar-card .toc-node {
-    /* 缩进由 renderTocTree 内联 padding-left 控制 */
+  /* ═══ 目录卡片（文章页，重构：真实层级缩进 —— 药丸逐级右移 + 分级刻度 + 树枝肘线）═══ */
+  .toc-sidebar-tree {
+    position: relative;
+    --toc-rail: 0.4rem; /* 0 级刻度 x（树主干 x）*/
+    --toc-step: 0.8rem; /* 每级缩进步长（侧边栏略窄）*/
+  }
+  /* 树主干：一条贯穿左缘的细线，锚定整棵树的视觉起点 */
+  .toc-sidebar-tree::before {
+    content: "";
+    position: absolute;
+    left: calc(var(--toc-rail) + 1px);
+    top: 0.25rem;
+    bottom: 0.25rem;
+    width: 1px;
+    border-radius: 9999px;
+    background: linear-gradient(
+      to bottom,
+      transparent,
+      color-mix(in srgb, var(--foreground) 9%, transparent) 12%,
+      color-mix(in srgb, var(--foreground) 9%, transparent) 88%,
+      transparent
+    );
+    pointer-events: none;
   }
   .toc-sidebar-card .toc-row {
     position: relative;
     display: flex;
     align-items: center;
-    padding: 0.24rem 0.5rem;
+    gap: 0.4rem;
+    padding: 0.28rem 0.5rem 0.28rem
+      calc(1.05rem + var(--toc-level) * var(--toc-step));
     border-radius: 0.5rem;
-    border-left: 2px solid transparent;
-    cursor: pointer;
-    transition:
-      background-color 0.22s ease-out,
-      border-color 0.22s ease-out;
-  }
-  .toc-sidebar-card .toc-row:hover {
-    background: color-mix(in srgb, var(--accent) 7%, transparent);
-  }
-  .toc-sidebar-card .toc-link {
-    flex: 1;
-    min-width: 0;
     text-decoration: none;
     color: color-mix(in srgb, var(--foreground) 62%, transparent);
-    font-size: 0.78rem;
-    line-height: 1.4;
+    transition:
+      background-color 0.22s ease-out,
+      color 0.22s ease-out;
+  }
+  /* 分级刻度：钉在各自层级 x（0 级在主干上，其余逐级右移成阶梯）*/
+  .toc-sidebar-card .toc-row::before {
+    content: "";
+    position: absolute;
+    left: calc(var(--toc-rail) + var(--toc-level) * var(--toc-step));
+    top: 50%;
+    width: 2px;
+    height: 1em;
+    transform: translateY(-50%);
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--foreground) 16%, transparent);
+    transition: background-color 0.22s ease-out;
+  }
+  /* 树枝肘线：子级行从父级刻度横向连到本级刻度，形成分支 */
+  .toc-sidebar-card .toc-node[data-depth="3"] .toc-row::after,
+  .toc-sidebar-card .toc-node[data-depth="4"] .toc-row::after,
+  .toc-sidebar-card .toc-node[data-depth="5"] .toc-row::after,
+  .toc-sidebar-card .toc-node[data-depth="6"] .toc-row::after {
+    content: "";
+    position: absolute;
+    left: calc(var(--toc-rail) + (var(--toc-level) - 1) * var(--toc-step));
+    top: 50%;
+    width: var(--toc-step);
+    height: 1.5px;
+    transform: translateY(-50%);
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--foreground) 12%, transparent);
+    transition: background-color 0.22s ease-out;
+  }
+  .toc-sidebar-card .toc-text {
+    display: inline-block;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    transition: color 0.22s ease-out;
+    vertical-align: middle;
+    font-size: 0.78rem;
+    line-height: 1.4;
   }
-  .toc-sidebar-card .toc-row:hover .toc-link {
+  .toc-sidebar-card .toc-row:hover {
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
     color: var(--accent);
   }
   .toc-sidebar-card .toc-row.is-active {
     background: color-mix(in srgb, var(--accent) 11%, transparent);
-    border-left-color: var(--accent);
-  }
-  .toc-sidebar-card .toc-row.is-active .toc-link {
     color: var(--accent);
+  }
+  .toc-sidebar-card .toc-row.is-active::before {
+    height: 1.2em;
+    opacity: 0;
+  }
+  .toc-sidebar-card .toc-row.is-active::after {
+    background: color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .toc-sidebar-card .toc-row.is-active .toc-text {
     font-weight: 600;
   }
-  .toc-sidebar-card .toc-node.is-ancestor .toc-link {
+  .toc-sidebar-card .toc-node.is-ancestor .toc-row {
     color: color-mix(in srgb, var(--accent) 55%, var(--foreground));
   }
-  .toc-sidebar-card .toc-children {
-    margin-left: 6px;
-    padding-left: 12px;
-    border-left: 1px dashed color-mix(in srgb, var(--border) 62%, transparent);
-    transition: border-color 0.35s ease-out;
+  .toc-sidebar-card .toc-node.is-ancestor .toc-row::before {
+    background: color-mix(in srgb, var(--accent) 45%, transparent);
   }
-  .toc-sidebar-card .toc-node.is-ancestor > .toc-children {
-    border-color: color-mix(in srgb, var(--accent) 48%, transparent);
+  .toc-sidebar-card .toc-node.is-ancestor .toc-row::after {
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
   }
-  .toc-sidebar-card .toc-node[data-depth="2"] > .toc-row .toc-link {
+  .toc-sidebar-card .toc-node[data-depth="2"] .toc-text {
     font-weight: 600;
-    color: var(--foreground);
   }
-  .toc-sidebar-card .toc-node[data-depth="3"] > .toc-row .toc-link {
+  .toc-sidebar-card .toc-node[data-depth="3"] .toc-text {
     font-size: 0.74rem;
   }
-  .toc-sidebar-card .toc-node[data-depth="4"] > .toc-row .toc-link,
-  .toc-sidebar-card .toc-node[data-depth="5"] > .toc-row .toc-link {
+  .toc-sidebar-card .toc-node[data-depth="4"] .toc-text,
+  .toc-sidebar-card .toc-node[data-depth="5"] .toc-text {
     font-size: 0.7rem;
-    color: color-mix(in srgb, var(--foreground) 48%, transparent);
   }
   .toc-sidebar-nav::-webkit-scrollbar {
     width: 3px;

@@ -129,7 +129,7 @@ const totalPad = String(total).padStart(2, "0");
             data-toc-comment
           >
             <span class="toc-emoji" aria-hidden="true">💬</span>
-            <span class="toc-link">评论</span>
+            <span class="toc-text">评论</span>
           </a>
         </nav>
       </div>
@@ -310,35 +310,60 @@ const totalPad = String(total).padStart(2, "0");
         border-radius: 10px;
       }
 
-      /* 树的定位上下文（共享指示条与条目共用坐标系）*/
+      /* 树的定位上下文（共享指示条与条目共用坐标系）+ 几何变量 */
       .toc-tree {
         position: relative;
+        --toc-rail: 0.4rem; /* 0 级刻度 x（树主干 x）*/
+        --toc-step: 0.85rem; /* 每级缩进步长 */
+      }
+      /* 树主干：一条贯穿左缘的细线，锚定整棵树的视觉起点 */
+      .toc-tree::before {
+        content: "";
+        position: absolute;
+        left: calc(var(--toc-rail) + 1px);
+        top: 0.3rem;
+        bottom: 0.3rem;
+        width: 1px;
+        border-radius: 9999px;
+        background: linear-gradient(
+          to bottom,
+          transparent,
+          color-mix(in srgb, var(--color-foreground) 10%, transparent) 12%,
+          color-mix(in srgb, var(--color-foreground) 10%, transparent) 88%,
+          transparent
+        );
+        pointer-events: none;
       }
 
-      /* ═══ 条目行 ═══ */
+      /* ═══ 条目行（重构：真实层级缩进 —— 药丸逐级右移 + 分级刻度 + 树枝肘线）═══ */
       .toc-row {
         position: relative;
         display: flex;
         align-items: center;
-        gap: 0.45rem;
-        padding: 0.3rem 0.5rem 0.3rem 0.75rem;
+        gap: 0.4rem;
+        padding: 0.3rem 0.5rem 0.3rem
+          calc(1.1rem + var(--toc-level) * var(--toc-step));
         border-radius: 0.5rem;
+        text-decoration: none;
         cursor: pointer;
-        transition: background-color 0.22s ease-out;
+        color: color-mix(in srgb, var(--color-foreground) 70%, transparent);
+        transition:
+          background-color 0.22s ease-out,
+          color 0.24s ease-out;
       }
-      /* 条目左侧轨道刻度 */
+      /* 分级刻度：钉在各自层级 x（0 级在主干上，其余逐级右移成阶梯）*/
       .toc-row::before {
         content: "";
         position: absolute;
-        left: 3px;
+        left: calc(var(--toc-rail) + var(--toc-level) * var(--toc-step));
         top: 50%;
         width: 2px;
-        height: 9px;
+        height: 1em;
         transform: translateY(-50%);
         border-radius: 9999px;
         background: color-mix(
           in srgb,
-          var(--color-foreground) 16%,
+          var(--color-foreground) 18%,
           transparent
         );
         transition:
@@ -346,98 +371,116 @@ const totalPad = String(total).padStart(2, "0");
           opacity 0.28s ease-out,
           background-color 0.28s ease-out;
       }
+      /* 树枝肘线：子级行从父级刻度横向连到本级刻度，形成分支 */
+      .toc-node[data-depth="3"] .toc-row::after,
+      .toc-node[data-depth="4"] .toc-row::after,
+      .toc-node[data-depth="5"] .toc-row::after,
+      .toc-node[data-depth="6"] .toc-row::after {
+        content: "";
+        position: absolute;
+        left: calc(var(--toc-rail) + (var(--toc-level) - 1) * var(--toc-step));
+        top: 50%;
+        width: var(--toc-step);
+        height: 1.5px;
+        transform: translateY(-50%);
+        border-radius: 9999px;
+        background: color-mix(
+          in srgb,
+          var(--color-foreground) 13%,
+          transparent
+        );
+        transition: background-color 0.24s ease-out;
+      }
       .toc-row:hover {
         background: color-mix(in srgb, var(--color-accent) 7%, transparent);
+        color: var(--color-accent);
+      }
+      .toc-row:hover::after {
+        background: color-mix(in srgb, var(--color-accent) 35%, transparent);
       }
 
-      /* 链接：默认弱化，聚焦当前章节（参考 gyoza 的 opacity-0 + hover 显现）*/
-      .toc-link {
-        flex: 1;
+      /* 文字：默认弱化，聚焦当前章节（参考 gyoza 的 opacity-0 + hover 显现）*/
+      .toc-text {
+        display: inline-block;
         min-width: 0;
-        text-decoration: none;
-        color: color-mix(in srgb, var(--color-foreground) 70%, transparent);
-        font-size: 0.8rem;
-        line-height: 1.4;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        opacity: 0.5;
-        transition:
-          opacity 0.3s ease-out,
-          color 0.24s ease-out;
+        vertical-align: middle;
+        font-size: 0.8rem;
+        line-height: 1.4;
+        opacity: 0.55;
+        transition: opacity 0.3s ease-out;
       }
-      #toc-fab-container:hover .toc-link {
+      #toc-fab-container:hover .toc-text {
         opacity: 0.95;
       }
-      .toc-row:hover .toc-link {
+      .toc-row:hover .toc-text {
         opacity: 1;
-        color: var(--color-accent);
       }
       .toc-row.is-active {
         background: color-mix(in srgb, var(--color-accent) 11%, transparent);
       }
-      .toc-row.is-active .toc-link {
+      .toc-row.is-active .toc-text {
         opacity: 1;
         color: var(--color-accent);
         font-weight: 650;
       }
-      /* 激活项让出刻度位置给共享指示条 */
+      /* 激活项让出刻度位置给共享指示条（指示条水平跟随该行刻度 x）*/
       .toc-row.is-active::before {
-        height: 13px;
+        height: 1.2em;
         opacity: 0;
+      }
+      .toc-row.is-active::after {
+        background: color-mix(in srgb, var(--color-accent) 50%, transparent);
       }
 
       /* 层级字号与字重 */
-      .toc-node[data-depth="2"] > .toc-row .toc-link {
+      .toc-node[data-depth="2"] .toc-text {
         font-size: 0.83rem;
         font-weight: 650;
-        color: var(--color-foreground);
       }
-      .toc-node[data-depth="3"] > .toc-row .toc-link {
+      .toc-node[data-depth="3"] .toc-text {
         font-size: 0.77rem;
         font-weight: 500;
       }
-      .toc-node[data-depth="4"] > .toc-row .toc-link,
-      .toc-node[data-depth="5"] > .toc-row .toc-link {
+      .toc-node[data-depth="4"] .toc-text,
+      .toc-node[data-depth="5"] .toc-text {
         font-size: 0.72rem;
         font-weight: 400;
       }
 
       /* 祖先链路：链路高亮 */
-      .toc-node.is-ancestor .toc-link {
-        opacity: 0.78;
+      .toc-node.is-ancestor .toc-row {
         color: color-mix(
           in srgb,
           var(--color-accent) 50%,
           var(--color-foreground)
         );
       }
-      .toc-node.is-ancestor > .toc-row::before {
+      .toc-node.is-ancestor .toc-row::before {
         background: color-mix(
           in srgb,
           var(--color-accent) 45%,
           transparent
         );
       }
-
-      /* 子列表：层级轨道 */
-      .toc-children {
-        margin-left: 6px;
-        padding-left: 14px;
-        border-left: 1px dashed
-          color-mix(in srgb, var(--color-border) 62%, transparent);
-        transition: border-color 0.35s ease-out;
-      }
-      .toc-node.is-ancestor > .toc-children {
-        border-color: color-mix(in srgb, var(--color-accent) 48%, transparent);
+      .toc-node.is-ancestor .toc-row::after {
+        background: color-mix(
+          in srgb,
+          var(--color-accent) 32%,
+          transparent
+        );
       }
 
-      /* ═══ 共享指示条（跨条目弹簧位移）═══ */
+      /* 子列表容器刻意无样式：保证 row 的 offsetTop / offsetLeft 精确（共享指示条依赖）*/
+
+      /* ═══ 共享指示条（跨条目弹簧位移：水平跟行、垂直跟层、x 由 JS 从行刻度读取）═══ */
       .toc-indicator {
         position: absolute;
         left: 0;
         top: 0;
-        width: 3px;
+        width: 2px;
         height: 0;
         border-radius: 9999px;
         background: linear-gradient(
@@ -448,7 +491,7 @@ const totalPad = String(total).padStart(2, "0");
         box-shadow:
           0 0 10px color-mix(in srgb, var(--color-accent) 70%, transparent),
           0 0 22px color-mix(in srgb, var(--color-accent) 28%, transparent);
-        transform: translate(0px, -16px);
+        transform: translate(-8px, -16px);
         opacity: 0;
         transition:
           transform 0.5s cubic-bezier(0.22, 1, 0.36, 1),
@@ -476,7 +519,7 @@ const totalPad = String(total).padStart(2, "0");
       .toc-comment-item::before {
         display: none;
       }
-      .toc-comment-item .toc-link {
+      .toc-comment-item .toc-text {
         opacity: 1;
         font-size: 0.8rem;
       }
@@ -515,8 +558,8 @@ const totalPad = String(total).padStart(2, "0");
         .toc-fab-icon,
         .toc-row,
         .toc-row::before,
-        .toc-link,
-        .toc-children,
+        .toc-row::after,
+        .toc-text,
         .toc-indicator,
         .toc-title-dot {
           transition: none;

@@ -87,15 +87,16 @@ export function initTocHighlight(
     items.sort((a, b) => a.top - b.top);
   };
 
-  // 共享指示条：位置与高度贴合当前条目。
-  // 用 offsetLeft/offsetTop（基于布局，不受面板 scale 变换影响），避免关闭态测量漂移
+  // 共享指示条：垂直跟随激活行、水平跟随该行层级刻度（::before 钉）的 x。
+  // 刻度 x 经计算样式读取，天然适配 HUD / 侧边栏两套几何（--toc-rail / --toc-step 各自定义）。
+  // offsetTop / offsetLeft 基于布局（offsetParent = 树容器，不受面板 scale 变换影响）
   const moveIndicator = (it: TocItem) => {
     const ind = opts.indicator;
     if (!ind) return;
+    const tick = getComputedStyle(it.row, "::before");
+    const x = it.row.offsetLeft + (parseFloat(tick.left) || 0);
     ind.style.opacity = "1";
-    ind.style.transform = `translate(${it.row.offsetLeft + 4}px, ${
-      it.row.offsetTop + 2
-    }px)`;
+    ind.style.transform = `translate(${x}px, ${it.row.offsetTop + 2}px)`;
     ind.style.height = `${Math.max(14, it.row.offsetHeight - 4)}px`;
   };
 

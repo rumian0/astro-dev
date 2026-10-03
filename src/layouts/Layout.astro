@@ -4,7 +4,6 @@ import { ClientRouter } from "astro:transitions";
 import { PUBLIC_GOOGLE_SITE_VERIFICATION } from "astro:env/client";
 import { SITE } from "@/config";
 import SearchModal from "@/components/SearchModal.astro";
-import TocButton from "@/components/TocButton.astro";
 import AccentColorInjector from "@/components/AccentColorInjector.astro";
 import "@/styles/global.css";
 import "katex/dist/katex.min.css";
@@ -283,7 +282,6 @@ const bg = SITE.background;
 
     <slot />
 
-    <TocButton />
     <SearchModal />
 
     <!-- Load full theme logic -->

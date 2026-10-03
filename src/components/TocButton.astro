@@ -1,14 +1,14 @@
 ---
 /**
- * TocButton — 全站目录（右下角浮动图标，点击展开）
- * - 自动扫描 #main-content 内的 h2/h3 生成目录
- * - 滚动时高亮当前章节（IntersectionObserver）
- * - 目录少于 2 项时整体隐藏
- * - 移动端隐藏文章头图（由 PostDetails 负责），本组件在各页生效
+ * TocButton — 文章目录（右下角浮动图标，点击展开）
+ * - 仅文章详情页挂载（PostDetails.astro）
+ * - 扫描 #main-content 的 h2/h3/h4，构建树形层级
+ * - 折叠/展开子项，当前章节自动展开祖先链路
+ * - 滚动时 IntersectionObserver 高亮 + 同步激活态
+ * - 少于 2 个标题整体隐藏
  */
 ---
 
-<!-- 右下角目录按钮 -->
 <div id="toc-button-root" class="toc-root" hidden aria-hidden="true">
   <button
     type="button"
@@ -93,7 +93,6 @@
     width: 1.25rem;
     height: 1.25rem;
   }
-  /* 活动指示点 */
   .toc-fab-dot {
     position: absolute;
     top: 0.45rem;
@@ -115,12 +114,12 @@
     position: absolute;
     right: 0;
     bottom: calc(100% + 0.7rem);
-    width: min(72vw, 19rem);
-    max-height: min(62vh, 26rem);
+    width: min(72vw, 19.5rem);
+    max-height: min(64vh, 27rem);
     display: flex;
     flex-direction: column;
     border: 1px solid color-mix(in srgb, var(--border) 35%, transparent);
-    background: color-mix(in srgb, var(--background) 88%, var(--background));
+    background: color-mix(in srgb, var(--background) 90%, var(--background));
     backdrop-filter: blur(20px) saturate(170%);
     -webkit-backdrop-filter: blur(20px) saturate(170%);
     border-radius: 1rem;
@@ -146,6 +145,7 @@
     gap: 0.5rem;
     padding: 0.7rem 0.85rem;
     border-bottom: 1px dashed color-mix(in srgb, var(--border) 30%, transparent);
+    flex-shrink: 0;
   }
   .toc-title {
     display: inline-flex;
@@ -186,38 +186,175 @@
   }
   .toc-body {
     overflow-y: auto;
-    padding: 0.5rem 0.6rem;
+    padding: 0.5rem 0.55rem 0.7rem;
     scrollbar-width: thin;
+    scrollbar-color:
+      color-mix(in srgb, var(--accent) 30%, transparent)
+      transparent;
   }
+  .toc-body::-webkit-scrollbar {
+    width: 5px;
+  }
+  .toc-body::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--accent) 28%, transparent);
+    border-radius: 10px;
+  }
+
+  /* ── 树形项 ── */
+  .toc-item {
+    margin-bottom: 1px;
+  }
+  .toc-row {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 0.55rem;
+    padding: 0.15rem 0.25rem 0.15rem 0.4rem;
+    transition: background-color 0.18s;
+  }
+  .toc-row:hover {
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+
+  /* 折叠按钮 / 占位 */
+  .toc-toggle {
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    border: 0;
+    background: transparent;
+    color: color-mix(in srgb, var(--foreground) 45%, transparent);
+    cursor: pointer;
+    border-radius: 0.3rem;
+    transition: color 0.18s, background-color 0.18s, transform 0.25s;
+    padding: 0;
+  }
+  .toc-toggle:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .toc-toggle svg {
+    width: 0.7rem;
+    height: 0.7rem;
+  }
+  /* 折叠态：箭头朝右 */
+  .toc-item.is-collapsed > .toc-row .toc-toggle svg {
+    transform: rotate(-90deg);
+  }
+  .toc-spacer {
+    flex-shrink: 0;
+    width: 1.15rem;
+    height: 1.15rem;
+    display: inline-block;
+  }
+
+  /* 子列表 + 引导线 */
+  .toc-children {
+    position: relative;
+    margin-left: 0.78rem;
+    padding-left: 0.55rem;
+  }
+  .toc-children::before {
+    content: "";
+    position: absolute;
+    left: 0.35rem;
+    top: 0.15rem;
+    bottom: 0.15rem;
+    width: 1px;
+    background: color-mix(in srgb, var(--border) 45%, transparent);
+    border-radius: 1px;
+  }
+  .toc-item.is-collapsed > .toc-children {
+    display: none;
+  }
+
+  /* 链接本身 */
   .toc-link {
+    flex: 1;
+    min-width: 0;
     display: block;
-    padding: 0.38rem 0.6rem;
+    padding: 0.3rem 0.55rem;
     border-radius: 0.5rem;
-    font-size: 0.85rem;
+    font-size: 0.82rem;
     line-height: 1.45;
-    color: color-mix(in srgb, var(--foreground) 70%, transparent);
+    color: color-mix(in srgb, var(--foreground) 72%, transparent);
     text-decoration: none;
     border-left: 2px solid transparent;
-    transition: color 0.18s, background-color 0.18s, border-color 0.18s;
+    transition: color 0.18s, border-color 0.18s;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .toc-link.is-h3 {
-    padding-left: 1.4rem;
-    font-size: 0.8rem;
+
+  /* ── 层级样式 ── */
+  /* h2：主章节 */
+  .toc-l2 > .toc-row .toc-link {
+    font-size: 0.85rem;
+    font-weight: 650;
+    color: var(--foreground);
+    padding-top: 0.36rem;
+    padding-bottom: 0.36rem;
   }
-  .toc-link:hover {
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 7%, transparent);
-  }
-  .toc-link.is-active {
+  .toc-l2 > .toc-row .toc-link.is-active {
     color: var(--accent);
     border-left-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+  /* h3：子章节 */
+  .toc-l3 > .toc-row .toc-link {
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: color-mix(in srgb, var(--foreground) 65%, transparent);
+  }
+  .toc-l3 > .toc-row .toc-link.is-active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
     font-weight: 600;
+  }
+  /* h4：子子章节 */
+  .toc-l4 > .toc-row .toc-link {
+    font-size: 0.72rem;
+    font-weight: 400;
+    color: color-mix(in srgb, var(--foreground) 50%, transparent);
+    padding: 0.24rem 0.5rem;
+  }
+  .toc-l4 > .toc-row .toc-link.is-active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    font-weight: 500;
+  }
+
+  /* 祖先链路弱化但可见 */
+  .toc-item.is-ancestor > .toc-row .toc-link {
+    color: color-mix(in srgb, var(--foreground) 55%, transparent);
+  }
+
+  /* 滚动到顶时顶部留白 */
+  .toc-body {
+    scroll-behavior: smooth;
   }
 
   @media (prefers-reduced-motion: reduce) {
     .toc-panel {
       animation: none;
+    }
+    .toc-toggle svg {
+      transition: none;
+    }
+  }
+
+  /* 移动端：面板宽一些 */
+  @media (max-width: 640px) {
+    .toc-root {
+      right: 0.7rem;
+      bottom: 0.7rem;
+    }
+    .toc-panel {
+      width: min(82vw, 17rem);
+      max-height: 56vh;
     }
   }
 </style>
@@ -239,37 +376,56 @@
     const dot = fab?.querySelector(".toc-fab-dot");
     if (!root || !fab || !panel || !list) return;
 
-    // 收集主内容标题
     const main = document.getElementById("main-content");
     const headings = Array.from(
-      (main ?? document).querySelectorAll<HTMLElement>("h2, h3")
+      (main ?? document).querySelectorAll<HTMLElement>("h2, h3, h4")
     );
     if (headings.length < 2) {
       root.hidden = true;
       return;
     }
 
-    const open = () => {
-      panel.hidden = false;
-      fab.setAttribute("aria-expanded", "true");
-      fab.setAttribute("aria-label", "关闭目录");
-      root.classList.add("is-open");
-    };
-    const close = () => {
-      panel.hidden = true;
-      fab.setAttribute("aria-expanded", "false");
-      fab.setAttribute("aria-label", "打开目录");
-      root.classList.remove("is-open");
-    };
+    // ── 为标题补 id ──
+    headings.forEach((h, i) => {
+      if (!h.id) h.id = `toc-h-${i}`;
+    });
 
-    // 渲染目录
-    list.innerHTML = headings
-      .map((h, i) => {
-        const id = h.id || `toc-h-${i}`;
-        if (!h.id) h.id = id;
-        return `<a class="toc-link${h.tagName === "H3" ? " is-h3" : ""}" href="#${id}" data-toc-link data-index="${i}">${h.textContent?.trim() || ""}</a>`;
-      })
-      .join("");
+    // ── 构建树 ──
+    type Node = { h: HTMLElement; level: number; children: Node[] };
+    const tree: Node[] = [];
+    const stack: Node[] = [];
+    for (const h of headings) {
+      const level = Number(h.tagName.charAt(1));
+      const node: Node = { h, level, children: [] };
+      while (stack.length && stack[stack.length - 1].level >= level) {
+        stack.pop();
+      }
+      if (stack.length) stack[stack.length - 1].children.push(node);
+      else tree.push(node);
+      stack.push(node);
+    }
+
+    // ── 渲染嵌套 ──
+    const chevron =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+    const render = (nodes: Node[]): string =>
+      nodes
+        .map((n) => {
+          const hasKids = n.children.length > 0;
+          return `<div class="toc-item toc-l${n.level}">
+            <div class="toc-row">
+              ${hasKids ? `<button class="toc-toggle" data-toggle aria-label="折叠">${chevron}</button>` : '<span class="toc-spacer"></span>'}
+              <a href="#${n.h.id}" class="toc-link" data-toc-link data-id="${n.h.id}">${escapeHtml(n.h.textContent?.trim() || "")}</a>
+            </div>
+            ${hasKids ? `<div class="toc-children">${render(n.children)}</div>` : ""}
+          </div>`;
+        })
+        .join("");
+
+    const escapeHtml = (s: string) =>
+      s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
+    list.innerHTML = render(tree);
 
     const links = Array.from(list.querySelectorAll<HTMLAnchorElement>("[data-toc-link]"));
     if (!links.length) {
@@ -279,55 +435,109 @@
 
     root.hidden = false;
 
-    // 点击目录项：平滑滚动 + 高亮
-    links.forEach(link => {
-      link.addEventListener("click", e => {
+    // ── 折叠/展开 ──
+    list.addEventListener(
+      "click",
+      (e) => {
+        const btn = (e.target as HTMLElement).closest("[data-toggle]");
+        if (!btn) return;
+        const item = btn.closest(".toc-item") as HTMLElement;
+        if (!item) return;
+        item.classList.toggle("is-collapsed");
+      },
+      { signal }
+    );
+
+    // ── 点击目录项：平滑滚动 + 关闭面板 ──
+    const close = () => {
+      panel.hidden = true;
+      fab.setAttribute("aria-expanded", "false");
+      fab.setAttribute("aria-label", "打开目录");
+      root.classList.remove("is-open");
+    };
+    const open = () => {
+      panel.hidden = false;
+      fab.setAttribute("aria-expanded", "true");
+      fab.setAttribute("aria-label", "关闭目录");
+      root.classList.add("is-open");
+    };
+
+    list.addEventListener(
+      "click",
+      (e) => {
+        const link = (e.target as HTMLElement).closest<HTMLElement>("[data-toc-link]");
+        if (!link) return;
         e.preventDefault();
-        const id = link.getAttribute("href")?.slice(1);
+        const id = link.getAttribute("data-id");
         const target = id ? document.getElementById(id) : null;
         if (target) {
           target.scrollIntoView({ behavior: "smooth", block: "start" });
           history.replaceState(null, "", `#${id}`);
         }
         close();
-      });
-    });
+      },
+      { signal }
+    );
 
-    // 滚动高亮（IntersectionObserver）
-    const setActive = (i: number) => {
-      links.forEach((l, j) => l.classList.toggle("is-active", j === i));
-      if (dot) dot.classList.toggle("is-active", i >= 0);
+    // ── 滚动高亮 + 自动展开祖先 ──
+    const setActive = (id: string) => {
+      links.forEach((l) => {
+        l.classList.toggle("is-active", l.getAttribute("data-id") === id);
+      });
+      // 展开祖先链路
+      const activeLink = list.querySelector<HTMLElement>(`[data-toc-link][data-id="${id}"]`);
+      list.querySelectorAll(".toc-item.is-ancestor").forEach((el) =>
+        el.classList.remove("is-ancestor")
+      );
+      if (activeLink) {
+        let el = activeLink.parentElement?.parentElement as HTMLElement | null;
+        while (el && el !== list) {
+          if (el.classList.contains("toc-item")) {
+            el.classList.remove("is-collapsed");
+            if (el !== activeLink.closest(".toc-item")) {
+              el.classList.add("is-ancestor");
+            }
+          }
+          el = el.parentElement;
+        }
+        // 同步 dot
+        if (dot) dot.classList.add("is-active");
+      }
     };
+
+    const headingById = new Map(headings.map((h, i) => [h.id, i]));
     const observer = new IntersectionObserver(
-      entries => {
-        // 选中最接近视口顶部的标题
+      (entries) => {
         const visible = entries
-          .filter(e => e.isIntersecting)
+          .filter((e) => e.isIntersecting)
           .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
         if (visible.length) {
-          const idx = Number(
-            (visible[0].target as HTMLElement).dataset.tocIndex ?? -1
-          );
-          setActive(idx);
+          const h = visible[0].target as HTMLElement;
+          setActive(h.id);
         }
       },
-      { rootMargin: "-15% 0px -75% 0px", threshold: 0 }
+      { rootMargin: "-12% 0px -72% 0px", threshold: 0 }
     );
-    headings.forEach(h => {
-      if (!h.dataset.tocIndex)
-        h.dataset.tocIndex = String(
-          links.findIndex(l => l.getAttribute("href") === `#${h.id}`)
-        );
-      observer.observe(h);
-    });
+    headings.forEach((h) => observer.observe(h));
 
-    fab.addEventListener("click", () => {
-      panel.hidden ? open() : close();
-    }, { signal });
+    // ── 初始激活 ──
+    if (headings.length) setActive(headings[0].id);
+
+    // ── 打开/关闭 ──
+    fab.addEventListener(
+      "click",
+      () => {
+        panel.hidden ? open() : close();
+      },
+      { signal }
+    );
     closeBtn?.addEventListener("click", close, { signal });
-    // ESC 关闭
-    document.addEventListener("keydown", e => {
-      if (e.key === "Escape") close();
-    }, { signal });
+    document.addEventListener(
+      "keydown",
+      (e) => {
+        if (e.key === "Escape" && !panel.hidden) close();
+      },
+      { signal }
+    );
   });
 </script>

@@ -1,11 +1,8 @@
 ---
 import IconMoon from "@/assets/icons/IconMoon.svg";
 import IconSearch from "@/assets/icons/IconSearch.svg";
-import IconArchive from "@/assets/icons/IconArchive.svg";
-import IconGallery from "@/assets/icons/IconGallery.svg";
 import IconSunHigh from "@/assets/icons/IconSunHigh.svg";
 import Logo from "@/assets/logo/devosfera.svg";
-import LinkButton from "./LinkButton.astro";
 import MobileMenu from "./MobileMenu.astro";
 import IntroAudioCompact from "./IntroAudioCompact.astro";
 import { SITE } from "@/config";
@@ -22,6 +19,18 @@ const isActive = (path: string) => {
 
   return currentPath === path || currentPathArray[0] === pathArray[0];
 };
+
+// 导航项类型：扁平链接或下拉分组
+interface NavItem {
+  label: string;
+  href?: string;
+  items?: { label: string; href: string; external?: boolean }[];
+}
+const navItems = SITE.nav as unknown as readonly NavItem[];
+
+// 分组是否 active：任一子项命中
+const isGroupActive = (items: { href: string }[]) =>
+  items.some(it => isActive(it.href));
 ---
 
 <a
@@ -85,71 +94,61 @@ const isActive = (path: string) => {
             </div>
           </button>
 
-          <!-- Desktop links (always visible on sm+) -->
-          <ul class="hidden sm:flex sm:flex-row sm:items-center sm:gap-1">
-            <li>
-              <a
-                href="/posts"
-                class:list={["nav-link", { "nav-active": isActive("/posts") }]}
-                >Posts</a
-              >
-            </li>
-            <li>
-              <a
-                href="/tags"
-                class:list={["nav-link", { "nav-active": isActive("/tags") }]}
-                >Tags</a
-              >
-            </li>
-            <li>
-              <a
-                href="/about"
-                class:list={["nav-link", { "nav-active": isActive("/about") }]}
-                >About</a
-              >
-            </li>
-            <li class="flex items-center">
-              <a
-                href="/search"
-                class:list={["nav-link", { "nav-active": isActive("/search") }]}
-                title="Go to Search">Search</a
-              >
-            </li>
+          <!-- Desktop links (always visible on sm+) —— dropdown mega-menu + glide pill -->
+          <ul
+            class="nav-menu-list hidden sm:flex sm:flex-row sm:items-center sm:gap-1"
+            data-glide-track
+          >
+            {/* 共用 hover 药丸：位置由 runtime 逐帧写入 */}
+            <li class="glide-pill" data-glide-pill aria-hidden="true"></li>
+
             {
-              SITE.showArchives && (
-                <li>
-                  <LinkButton
-                    href="/archives"
-                    class:list={[
-                      "nav-link",
-                      { "nav-active": isActive("/archives") },
-                    ]}
-                    title="Archives"
-                    aria-label="archives"
-                  >
-                    <IconArchive class="hidden sm:inline-block" />
-                    <span class="sm:sr-only">Archives</span>
-                  </LinkButton>
-                </li>
-              )
-            }
-            {
-              SITE.showGalleries && (
-                <li>
-                  <LinkButton
-                    href="/galleries"
-                    class:list={[
-                      "nav-link",
-                      { "nav-active": isActive("/galleries") },
-                    ]}
-                    title="Galleries"
-                    aria-label="galleries"
-                  >
-                    <IconGallery class="hidden sm:inline-block" />
-                    <span class="sm:sr-only">Galleries</span>
-                  </LinkButton>
-                </li>
-              )
+              navItems.map(item => {
+                const isGroup = Array.isArray(item.items) && item.items.length > 0;
+                if (isGroup) {
+                  const active = isGroupActive(item.items!);
+                  return (
+                    <li class="nav-menu-item relative">
+                      <button
+                        class:list={["nav-link nav-link-cn nav-dropdown-trigger", { "nav-active": active }]}
+                        data-glide-item
+                        aria-haspopup="true"
+                        aria-expanded="false"
+                      >
+                        <span>{item.label}</span>
+                        <svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+                      </button>
+                      <ul class="nav-dropdown" data-glide-track>
+                        <li class="glide-pill" data-glide-pill aria-hidden="true"></li>
+                        {item.items!.map(sub => (
+                          <li>
+                            <a
+                              href={sub.href}
+                              class:list={["nav-dropdown-link", { "nav-active": isActive(sub.href) }]}
+                              data-glide-item
+                              target={sub.external ? "_blank" : undefined}
+                              rel={sub.external ? "noopener" : undefined}
+                            >
+                              {sub.label}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  );
+                }
+                return (
+                  <li class="nav-menu-item relative">
+                    <a
+                      href={item.href}
+                      class:list={["nav-link nav-link-cn", { "nav-active": isActive(item.href!) }]}
+                      data-glide-item
+                    >
+                      {item.label}
+                    </a>
+                  </li>
+                );
+              })
             }
 
             <!-- Separator -->
@@ -294,6 +293,12 @@ const isActive = (path: string) => {
     transition: color 0.2s ease, background-color 0.2s ease;
   }
 
+  /* 中文导航：清羽风格文字链 */
+  .nav-link-cn {
+    letter-spacing: 0.08em;
+    font-weight: 500;
+  }
+
   .nav-link:focus-visible, .nav-icon-btn:focus-visible, .nav-search-btn:focus-visible {
     outline: none;
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
@@ -310,19 +315,7 @@ const isActive = (path: string) => {
     background: transparent;
   }
 
-  /* Glowing dot for active state (macOS Dock style) */
-  .nav-active::after {
-    content: "";
-    position: absolute;
-    bottom: -0.1rem;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 0.35rem;
-    height: 0.35rem;
-    border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 80%, transparent);
-  }
+  /* glide pill 取代原点高亮，作为 hover/active 药丸 */
 
   .nav-icon-btn {
     display: inline-flex;
@@ -458,6 +451,105 @@ const isActive = (path: string) => {
     transform: rotate(-45deg);
   }
 
+  /* ─── Glide pill（仿清羽：跟随 hover/active 的药丸高亮）─── */
+  .nav-menu-list,
+  .nav-dropdown {
+    position: relative;
+  }
+  .glide-pill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 0;
+    border-radius: 0.5rem;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      transform 0.28s cubic-bezier(0.34, 1.4, 0.5, 1),
+      width 0.28s cubic-bezier(0.34, 1.4, 0.5, 1),
+      top 0.28s cubic-bezier(0.34, 1.4, 0.5, 1),
+      height 0.28s cubic-bezier(0.34, 1.4, 0.5, 1),
+      opacity 0.2s ease;
+    z-index: 0;
+  }
+  .glide-pill.is-active {
+    opacity: 1;
+  }
+  /* 活动态药丸淡色常驻 */
+  .glide-pill.is-rest {
+    opacity: 0.55;
+  }
+  .nav-menu-item,
+  .nav-dropdown li:not(.glide-pill) {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ─── 下拉菜单（横向排布）─── */
+  .nav-menu-item .nav-dropdown {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    left: 50%;
+    transform: translateX(-50%) translateY(6px);
+    padding: 0.4rem;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.1rem;
+    list-style: none;
+    border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+    background: color-mix(in srgb, var(--background) 88%, transparent);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    border-radius: 0.85rem;
+    box-shadow: 0 16px 40px -16px color-mix(in srgb, var(--accent) 35%, transparent);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.34, 1.4, 0.5, 1), visibility 0.22s;
+    z-index: 50;
+  }
+  .nav-menu-item.is-open .nav-dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+  }
+  .nav-menu-item.is-open .nav-chevron {
+    transform: rotate(180deg);
+  }
+  .nav-chevron {
+    width: 0.85rem;
+    height: 0.85rem;
+    opacity: 0.6;
+    transition: transform 0.22s ease;
+  }
+  .nav-dropdown-link {
+    position: relative;
+    display: block;
+    padding: 0.45rem 0.7rem;
+    border-radius: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--foreground);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.18s ease, background-color 0.18s ease;
+    z-index: 1;
+  }
+  .nav-dropdown-link:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+  .nav-dropdown-link.nav-active {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .glide-pill { transition: opacity 0.2s ease; }
+    .nav-menu-item .nav-dropdown { transition: opacity 0.2s ease; }
+  }
+
 
 </style>
 
@@ -500,7 +592,6 @@ const isActive = (path: string) => {
     if (headerCleanup) headerCleanup.abort();
     headerCleanup = new AbortController();
     const { signal } = headerCleanup;
-
     const menuBtn = document.querySelector("#menu-btn");
     const mobileMenu = document.querySelector("#mobile-menu");
     const backdrop = document.querySelector(".mobile-menu-backdrop");
@@ -543,13 +634,178 @@ const isActive = (path: string) => {
     });
   }
 
+  /* ═══ Glide pill + dropdown 导航逻辑（仿清羽）═══
+   * 每个 [data-glide-track] 内共用一个 .glide-pill：
+   *   - hover/focus 任一 [data-glide-item] 时，药丸平移覆盖该元素（按元素实际宽高定位）
+   *   - 鼠标离开轨道时，药丸回到当前页对应的活动项（若有）
+   *   - 下拉组：hover 打开（带关闭延迟防悬停间隙）、点击 toggle、ESC 关闭
+   *   - 窗口 resize / 字体加载完成后重新对齐药丸
+   */
+  let glideCleanup: AbortController | null = null;
+  let closeTimers = new Map<HTMLElement, number>();
+
+  function setupGlideNav() {
+    if (glideCleanup) glideCleanup.abort();
+    glideCleanup = new AbortController();
+    const { signal } = glideCleanup;
+
+    const groups = Array.from(
+      document.querySelectorAll<HTMLElement>(".nav-menu-item")
+    );
+    // 导航切换后关闭所有下拉（Header 在 view transitions 中常驻）
+    groups.forEach(g => g.classList.remove("is-open"));
+
+    const tracks = document.querySelectorAll<HTMLElement>("[data-glide-track]");
+    tracks.forEach(track => {
+      const pill = track.querySelector<HTMLElement>(".glide-pill");
+      if (!pill) return;
+      const items = Array.from(
+        track.querySelectorAll<HTMLElement>("[data-glide-item]")
+      );
+      if (!items.length) return;
+
+      const activeItem =
+        items.find(it => it.classList.contains("nav-active")) || null;
+
+      const placeOn = (el: HTMLElement | null, rest = false) => {
+        if (!el || !track.isConnected) {
+          pill.classList.remove("is-active", "is-rest");
+          return;
+        }
+        const tRect = track.getBoundingClientRect();
+        const iRect = el.getBoundingClientRect();
+        const x = iRect.left - tRect.left;
+        const w = iRect.width;
+        const y = iRect.top - tRect.top;
+        const h = iRect.height;
+        pill.style.transform = `translateX(${x}px)`;
+        pill.style.width = `${w}px`;
+        pill.style.top = `${y}px`;
+        pill.style.height = `${h}px`;
+        pill.classList.add("is-active");
+        pill.classList.toggle("is-rest", rest);
+      };
+
+      // 初始：落在活动项上（淡色常驻）
+      placeOn(activeItem, true);
+
+      items.forEach(item => {
+        const enter = () => placeOn(item, false);
+        item.addEventListener("pointerenter", enter, { signal });
+        item.addEventListener("focusin", enter, { signal });
+      });
+
+      // 离开轨道：回到活动项
+      track.addEventListener(
+        "pointerleave",
+        () => placeOn(activeItem, true),
+        { signal }
+      );
+
+      // 布局/字体变化后重新对齐（药丸跟随实际位置）
+      const realign = () => placeOn(activeItem, true);
+      window.addEventListener("resize", realign, { signal });
+      if (document.fonts?.ready) {
+        document.fonts.ready.then(() =>
+          requestAnimationFrame(realign)
+        );
+      }
+    });
+
+    // 下拉组开关（桌面 hover + 键盘/点击）
+    groups.forEach(group => {
+      const trigger = group.querySelector<HTMLElement>(".nav-dropdown-trigger");
+      const dropdown = group.querySelector<HTMLElement>(".nav-dropdown");
+      if (!trigger || !dropdown) return;
+
+      const closeAll = () =>
+        groups.forEach(g => {
+          g.classList.remove("is-open");
+          g.querySelector(".nav-dropdown-trigger")?.setAttribute(
+            "aria-expanded",
+            "false"
+          );
+        });
+
+      const open = () => {
+        if (closeTimers.has(group)) {
+          window.clearTimeout(closeTimers.get(group));
+          closeTimers.delete(group);
+        }
+        // 关闭其它组
+        closeAll();
+        group.classList.add("is-open");
+        trigger.setAttribute("aria-expanded", "true");
+      };
+      const scheduleClose = () => {
+        // 防悬停间隙：延迟关闭，给鼠标穿过 trigger→下拉的 0.5rem 留时间
+        if (closeTimers.has(group)) return;
+        const t = window.setTimeout(() => {
+          group.classList.remove("is-open");
+          trigger.setAttribute("aria-expanded", "false");
+          closeTimers.delete(group);
+        }, 160);
+        closeTimers.set(group, t);
+      };
+      const closeNow = () => {
+        if (closeTimers.has(group)) {
+          window.clearTimeout(closeTimers.get(group));
+          closeTimers.delete(group);
+        }
+        group.classList.remove("is-open");
+        trigger.setAttribute("aria-expanded", "false");
+      };
+
+      group.addEventListener("pointerenter", open, { signal });
+      group.addEventListener("pointerleave", scheduleClose, { signal });
+      // 点击 toggle（触屏/键盘）
+      trigger.addEventListener(
+        "click",
+        e => {
+          e.preventDefault();
+          group.classList.contains("is-open") ? closeNow() : open();
+        },
+        { signal }
+      );
+      // ESC 关闭
+      trigger.addEventListener(
+        "keydown",
+        e => {
+          if (e.key === "Escape") closeNow();
+        },
+        { signal }
+      );
+      // 点击下拉项后关闭
+      dropdown.querySelectorAll("a").forEach(a =>
+        a.addEventListener("click", closeNow, { signal })
+      );
+      // 下拉内部悬停取消延迟关闭
+      dropdown.addEventListener("pointerenter", open, { signal });
+    });
+
+    // 点击页面空白处关闭所有下拉
+    document.addEventListener(
+      "click",
+      e => {
+        const target = e.target as Node;
+        if (!target || !(target instanceof Element)) return;
+        if (!target.closest(".nav-menu-item")) {
+          groups.forEach(g => g.classList.remove("is-open"));
+        }
+      },
+      { signal }
+    );
+  }
+
   // Initial load
   setupScrollPhysics();
   setupMobileNav();
+  setupGlideNav();
 
   // Runs on view transitions navigation
   document.addEventListener("astro:after-swap", () => {
     setupScrollPhysics();
     setupMobileNav();
+    setupGlideNav();
   });
 </script>

@@ -1,0 +1,333 @@
+---
+/**
+ * TocButton — 全站目录（右下角浮动图标，点击展开）
+ * - 自动扫描 #main-content 内的 h2/h3 生成目录
+ * - 滚动时高亮当前章节（IntersectionObserver）
+ * - 目录少于 2 项时整体隐藏
+ * - 移动端隐藏文章头图（由 PostDetails 负责），本组件在各页生效
+ */
+---
+
+<!-- 右下角目录按钮 -->
+<div id="toc-button-root" class="toc-root" hidden aria-hidden="true">
+  <button
+    type="button"
+    id="toc-fab"
+    class="toc-fab"
+    aria-label="打开目录"
+    aria-expanded="false"
+    title="目录"
+  >
+    <svg
+      class="toc-fab-icon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <line x1="8" y1="6" x2="21" y2="6"></line>
+      <line x1="8" y1="12" x2="21" y2="12"></line>
+      <line x1="8" y1="18" x2="21" y2="18"></line>
+      <line x1="3" y1="6" x2="3.01" y2="6"></line>
+      <line x1="3" y1="12" x2="3.01" y2="12"></line>
+      <line x1="3" y1="18" x2="3.01" y2="18"></line>
+    </svg>
+    <span class="toc-fab-dot" aria-hidden="true"></span>
+  </button>
+
+  <div id="toc-panel" class="toc-panel" role="dialog" aria-label="文章目录" hidden>
+    <div class="toc-head">
+      <span class="toc-title">目录</span>
+      <button type="button" class="toc-close" aria-label="关闭目录">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <nav class="toc-body" id="toc-list" aria-label="目录列表"></nav>
+  </div>
+</div>
+
+<style>
+  .toc-root {
+    position: fixed;
+    right: 1.1rem;
+    bottom: 1.1rem;
+    z-index: 90;
+    pointer-events: none;
+  }
+  .toc-root:not([hidden]) {
+    pointer-events: auto;
+  }
+
+  /* ── 浮动按钮 ── */
+  .toc-fab {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+    background: color-mix(in srgb, var(--background) 82%, transparent);
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+    color: var(--foreground);
+    box-shadow: 0 10px 30px -12px color-mix(in srgb, var(--accent) 30%, transparent);
+    cursor: pointer;
+    transition:
+      border-color 0.2s,
+      color 0.2s,
+      transform 0.25s cubic-bezier(0.34, 1.4, 0.5, 1),
+      box-shadow 0.2s;
+  }
+  .toc-fab:hover,
+  .toc-fab[aria-expanded="true"] {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    transform: translateY(-2px);
+    box-shadow: 0 14px 36px -12px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .toc-fab-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+  /* 活动指示点 */
+  .toc-fab-dot {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.45rem;
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 999px;
+    background: var(--accent);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 70%, transparent);
+    opacity: 0;
+    transition: opacity 0.25s;
+  }
+  .toc-fab-dot.is-active {
+    opacity: 1;
+  }
+
+  /* ── 面板 ── */
+  .toc-panel {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.7rem);
+    width: min(72vw, 19rem);
+    max-height: min(62vh, 26rem);
+    display: flex;
+    flex-direction: column;
+    border: 1px solid color-mix(in srgb, var(--border) 35%, transparent);
+    background: color-mix(in srgb, var(--background) 88%, var(--background));
+    backdrop-filter: blur(20px) saturate(170%);
+    -webkit-backdrop-filter: blur(20px) saturate(170%);
+    border-radius: 1rem;
+    box-shadow: 0 24px 70px -28px color-mix(in srgb, var(--accent) 40%, transparent);
+    overflow: hidden;
+    transform-origin: bottom right;
+    animation: toc-in 0.22s cubic-bezier(0.34, 1.4, 0.5, 1);
+  }
+  @keyframes toc-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.6rem) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  .toc-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.7rem 0.85rem;
+    border-bottom: 1px dashed color-mix(in srgb, var(--border) 30%, transparent);
+  }
+  .toc-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--foreground);
+  }
+  .toc-title::before {
+    content: "";
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 999px;
+    background: var(--accent);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
+  }
+  .toc-close {
+    display: grid;
+    place-items: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 0.5rem;
+    border: 0;
+    background: transparent;
+    color: color-mix(in srgb, var(--foreground) 55%, transparent);
+    cursor: pointer;
+    transition: color 0.18s, background-color 0.18s;
+  }
+  .toc-close:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+  .toc-close svg {
+    width: 0.9rem;
+    height: 0.9rem;
+  }
+  .toc-body {
+    overflow-y: auto;
+    padding: 0.5rem 0.6rem;
+    scrollbar-width: thin;
+  }
+  .toc-link {
+    display: block;
+    padding: 0.38rem 0.6rem;
+    border-radius: 0.5rem;
+    font-size: 0.85rem;
+    line-height: 1.45;
+    color: color-mix(in srgb, var(--foreground) 70%, transparent);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: color 0.18s, background-color 0.18s, border-color 0.18s;
+  }
+  .toc-link.is-h3 {
+    padding-left: 1.4rem;
+    font-size: 0.8rem;
+  }
+  .toc-link:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+  }
+  .toc-link.is-active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    font-weight: 600;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .toc-panel {
+      animation: none;
+    }
+  }
+</style>
+
+<script>
+  // ═══ 目录：扫描 #main-content 标题，右下角浮动展开 ═══
+  let tocCleanup: AbortController | null = null;
+
+  document.addEventListener("astro:page-load", () => {
+    if (tocCleanup) tocCleanup.abort();
+    tocCleanup = new AbortController();
+    const { signal } = tocCleanup;
+
+    const root = document.getElementById("toc-button-root");
+    const fab = document.getElementById("toc-fab");
+    const panel = document.getElementById("toc-panel");
+    const list = document.getElementById("toc-list");
+    const closeBtn = document.querySelector(".toc-close");
+    const dot = fab?.querySelector(".toc-fab-dot");
+    if (!root || !fab || !panel || !list) return;
+
+    // 收集主内容标题
+    const main = document.getElementById("main-content");
+    const headings = Array.from(
+      (main ?? document).querySelectorAll<HTMLElement>("h2, h3")
+    );
+    if (headings.length < 2) {
+      root.hidden = true;
+      return;
+    }
+
+    const open = () => {
+      panel.hidden = false;
+      fab.setAttribute("aria-expanded", "true");
+      fab.setAttribute("aria-label", "关闭目录");
+      root.classList.add("is-open");
+    };
+    const close = () => {
+      panel.hidden = true;
+      fab.setAttribute("aria-expanded", "false");
+      fab.setAttribute("aria-label", "打开目录");
+      root.classList.remove("is-open");
+    };
+
+    // 渲染目录
+    list.innerHTML = headings
+      .map((h, i) => {
+        const id = h.id || `toc-h-${i}`;
+        if (!h.id) h.id = id;
+        return `<a class="toc-link${h.tagName === "H3" ? " is-h3" : ""}" href="#${id}" data-toc-link data-index="${i}">${h.textContent?.trim() || ""}</a>`;
+      })
+      .join("");
+
+    const links = Array.from(list.querySelectorAll<HTMLAnchorElement>("[data-toc-link]"));
+    if (!links.length) {
+      root.hidden = true;
+      return;
+    }
+
+    root.hidden = false;
+
+    // 点击目录项：平滑滚动 + 高亮
+    links.forEach(link => {
+      link.addEventListener("click", e => {
+        e.preventDefault();
+        const id = link.getAttribute("href")?.slice(1);
+        const target = id ? document.getElementById(id) : null;
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+          history.replaceState(null, "", `#${id}`);
+        }
+        close();
+      });
+    });
+
+    // 滚动高亮（IntersectionObserver）
+    const setActive = (i: number) => {
+      links.forEach((l, j) => l.classList.toggle("is-active", j === i));
+      if (dot) dot.classList.toggle("is-active", i >= 0);
+    };
+    const observer = new IntersectionObserver(
+      entries => {
+        // 选中最接近视口顶部的标题
+        const visible = entries
+          .filter(e => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible.length) {
+          const idx = Number(
+            (visible[0].target as HTMLElement).dataset.tocIndex ?? -1
+          );
+          setActive(idx);
+        }
+      },
+      { rootMargin: "-15% 0px -75% 0px", threshold: 0 }
+    );
+    headings.forEach(h => {
+      if (!h.dataset.tocIndex)
+        h.dataset.tocIndex = String(
+          links.findIndex(l => l.getAttribute("href") === `#${h.id}`)
+        );
+      observer.observe(h);
+    });
+
+    fab.addEventListener("click", () => {
+      panel.hidden ? open() : close();
+    }, { signal });
+    closeBtn?.addEventListener("click", close, { signal });
+    // ESC 关闭
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape") close();
+    }, { signal });
+  });
+</script>

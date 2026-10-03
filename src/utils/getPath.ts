@@ -1,36 +1,40 @@
-import { BLOG_PATH } from "@/content.config";
 import { slugifyStr } from "./slugify";
 
 /**
- * Get full path of a blog post
- * @param id - id of the blog post (aka slug)
- * @param filePath - the blog post full file location
- * @param includeBase - whether to include `/posts` in return value
- * @returns blog post path
+ * One-folder-per-post slug: id is `<slug>/index` (folder) or `<slug>` (flat).
+ * Strip the trailing `/index` and slugify the folder name.
+ */
+export function getBlogSlug(id: string): string {
+  return slugifyStr(id.replace(/\/index$/, ""));
+}
+
+/**
+ * Legacy path helper (folder-aware). Returns `/posts/<slug>` by default.
+ * Prefer `getPostPath` for blog detail permalinks (date-based).
+ * Still used as the OG-image base fallback and by callers that don't have a date.
  */
 export function getPath(
   id: string,
-  filePath: string | undefined,
+  _filePath: string | undefined,
   includeBase = true
-) {
-  const pathSegments = filePath
-    ?.replace(BLOG_PATH, "")
-    .split("/")
-    .filter(path => path !== "") // remove empty string in the segments ["", "other-path"] <- empty string will be removed
-    .filter(path => !path.startsWith("_")) // exclude directories start with underscore "_"
-    .slice(0, -1) // remove the last segment_ file name_ since it's unnecessary
-    .map(segment => slugifyStr(segment)); // slugify each segment path
-
+): string {
   const basePath = includeBase ? "/posts" : "";
+  const slug = getBlogSlug(id);
+  return [basePath, slug].join("/");
+}
 
-  // Making sure `id` does not contain the directory
-  const blogId = id.split("/");
-  const slug = blogId.length > 0 ? blogId.slice(-1) : blogId;
-
-  // If not inside the sub-dir, simply return the file path
-  if (!pathSegments || pathSegments.length < 1) {
-    return [basePath, slug].join("/");
-  }
-
-  return [basePath, ...pathSegments, slug].join("/");
+/**
+ * Date-based permalink: `/YYYY/MM/DD/<slug>/` (UTC, matches the noon-normalized
+ * pubDatetime so the URL is stable across builds and timezones).
+ */
+export function getPostPath(post: {
+  id: string;
+  data: { pubDatetime: Date };
+}): string {
+  const d = post.data.pubDatetime;
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const slug = getBlogSlug(post.id);
+  return `/${yyyy}/${mm}/${dd}/${slug}/`;
 }

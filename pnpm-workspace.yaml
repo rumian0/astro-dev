@@ -1,6 +1,11 @@
 allowBuilds:
-  esbuild: true
-  sharp: true
-onlyBuiltDependencies:
-  - esbuild
-  - sharp
+  esbuild: set this to true or false
+  sharp: set this to true or false
+# pnpm 11 把配置从 package.json 的 "pnpm" 字段移到了这里。
+#
+# 锁定 vite 到 7.3.3：
+#   @tailwindcss/vite@4.3.0 的 peer 允许 ^5||^6||^7||^8，pnpm 默认解析到最高的
+#   vite@8(rolldown)，与它不兼容（构建报 `Missing field tsconfigPaths`）。
+#   astro@6.3.1 依赖 vite ^7.3.2，所以统一到 7.3.3 是正确的。
+overrides:
+  vite: 7.3.3

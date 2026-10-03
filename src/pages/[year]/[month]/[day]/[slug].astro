@@ -1,0 +1,41 @@
+---
+import { type CollectionEntry, getCollection } from "astro:content";
+import PostDetails from "@/layouts/PostDetails.astro";
+import getSortedPosts from "@/utils/getSortedPosts";
+import { getPostPath, getBlogSlug } from "@/utils/getPath";
+
+export async function getStaticPaths() {
+  const posts = await getCollection("blog", ({ data }) => !data.draft);
+  return posts.map(post => {
+    const d = post.data.pubDatetime;
+    return {
+      params: {
+        year: String(d.getUTCFullYear()),
+        month: String(d.getUTCMonth() + 1).padStart(2, "0"),
+        day: String(d.getUTCDate()).padStart(2, "0"),
+        slug: getBlogSlug(post.id),
+      },
+      props: { post },
+    };
+  });
+}
+
+const { post } = Astro.props;
+
+const allPosts = await getCollection("blog");
+const sortedPosts = getSortedPosts(allPosts) as CollectionEntry<"blog">[];
+
+// Sanity check: the built path must match getPostPath (used by cards / RSS / OG)
+const canonical = getPostPath(post);
+const { year, month, day, slug } = Astro.params;
+const expected = `/${year}/${month}/${day}/${slug}/`;
+if (canonical !== expected) {
+  // Non-fatal; surfaces slug/date drift during content edits
+  console.warn(`[route] canonical mismatch: ${canonical} vs ${expected}`);
+}
+
+// expose for template without unused-variable lint
+void canonical;
+---
+
+<PostDetails post={post} posts={sortedPosts} />

@@ -1,24 +1,33 @@
-import type { CollectionEntry } from "astro:content";
-import { getPath } from "./getPath";
+/// <reference path="../../.astro/types.d.ts" />
 
-export type ContentEntry =
-  | CollectionEntry<"blog">
-  | CollectionEntry<"galleries">;
+import type { CollectionEntry } from "astro:content";
+import { getPostPath } from "./getPath";
+
+export type ContentEntry = CollectionEntry<"blog"> | CollectionEntry<"galleries">;
 
 const isGalleryEntry = (
   entry: Pick<ContentEntry, "collection">
 ): entry is CollectionEntry<"galleries"> => entry.collection === "galleries";
 
-export const getGallerySlug = (id: string) => id.replace(/\/index(?:\.(?:md|mdx))?$/, "");
+export const getGallerySlug = (id: string) =>
+  id.replace(/\/index(?:\.(?:md|mdx))?$/, "");
 
+/**
+ * Canonical public path for any content entry.
+ * - blog → date-based permalink `/YYYY/MM/DD/<slug>/`
+ * - galleries → `/galleries/<slug>`
+ */
 export const getEntryPath = (
-  entry: Pick<ContentEntry, "collection" | "id" | "filePath">
+  entry: Pick<ContentEntry, "collection" | "id" | "filePath"> & {
+    data: { pubDatetime: Date };
+  }
 ) =>
   isGalleryEntry(entry)
     ? `/galleries/${getGallerySlug(entry.id)}`
-    : getPath(entry.id, entry.filePath);
+    : getPostPath(entry);
 
 export const getEntryPublishedMs = (entry: ContentEntry) => {
-  const modDatetime = "modDatetime" in entry.data ? entry.data.modDatetime : null;
+  const modDatetime =
+    "modDatetime" in entry.data ? entry.data.modDatetime : null;
   return new Date(modDatetime ?? entry.data.pubDatetime).getTime();
 };

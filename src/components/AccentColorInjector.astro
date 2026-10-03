@@ -1,0 +1,23 @@
+---
+import { SITE } from "@/config";
+
+// 每页随机强调色：注入 --accent（明/暗双值），覆盖 global.css 的 SSR 默认值。
+// 新主题变量名（--accent/--background 等）保持不变，所有 text-accent/bg-background 依旧生效。
+const accentList = SITE.color.accent;
+---
+
+<script is:inline define:vars={{ accentList }}>
+  (function () {
+    function inject() {
+      var accent = accentList[(Math.random() * accentList.length) | 0];
+      var style = document.createElement("style");
+      style.textContent =
+        ':root,html[data-theme="light"]{--accent:' + accent.light + ";}" +
+        'html[data-theme="dark"]{--accent:' + accent.dark + ";}";
+      document.head.appendChild(style);
+    }
+    inject();
+    // Astro View Transitions: 每次切页重新注入（保持每页随机色）
+    document.addEventListener("astro:page-load", inject);
+  })();
+</script>

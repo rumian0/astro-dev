@@ -1,0 +1,36 @@
+---
+interface Props {
+  title: string;
+  url: string;
+  desc?: string;
+  image?: string;
+}
+
+const { title, url, desc, image } = Astro.props;
+const hostname = new URL(url).hostname;
+---
+
+<a
+  href={url}
+  target="_blank"
+  rel="noopener"
+  class="group not-prose flex items-center gap-4 rounded-xl border border-border/30 bg-foreground/[0.03] p-4 transition-all hover:-translate-y-1 hover:border-accent/40 hover:shadow-lg hover:shadow-accent/10"
+>
+  {
+    image && (
+      <img
+        src={image}
+        alt={title}
+        class="h-12 w-12 flex-shrink-0 rounded-full object-cover"
+        loading="lazy"
+      />
+    )
+  }
+  <div class="min-w-0 flex-1">
+    <p class="truncate font-medium transition-colors group-hover:text-accent">
+      {title}
+    </p>
+    {desc && <p class="truncate text-sm text-foreground/60">{desc}</p>}
+    <p class="truncate text-xs text-foreground/40 font-firacode">{hostname}</p>
+  </div>
+</a>

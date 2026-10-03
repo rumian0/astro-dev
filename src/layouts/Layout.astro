@@ -4,7 +4,10 @@ import { ClientRouter } from "astro:transitions";
 import { PUBLIC_GOOGLE_SITE_VERIFICATION } from "astro:env/client";
 import { SITE } from "@/config";
 import SearchModal from "@/components/SearchModal.astro";
+import TocButton from "@/components/TocButton.astro";
+import AccentColorInjector from "@/components/AccentColorInjector.astro";
 import "@/styles/global.css";
+import "katex/dist/katex.min.css";
 
 type Props = {
   title?: string;
@@ -105,6 +108,7 @@ const finalStructuredData = structuredDataProp ?? (
 
 const showCursorGlow = SITE.backdropEffects.cursorGlow;
 const showGrain = SITE.backdropEffects.grain;
+const bg = SITE.background;
 ---
 
 <!doctype html>
@@ -240,8 +244,42 @@ const showGrain = SITE.backdropEffects.grain;
         };
       })();
     </script>
+
+    <AccentColorInjector />
+
+    <!-- Fancybox lightbox (local, avoids CDN tracking-prevention blocks).
+         Used by live galleries (person-life / Love-eyes). Static galleries use
+         the built-in <dialog> lightbox instead. is:inline so the UMD global is
+         re-evaluated on each View Transition navigation (idempotent). -->
+    <link rel="stylesheet" href="/fancybox/fancybox.min.css" />
+    <script is:inline src="/fancybox/fancybox.umd.min.js"></script>
+    <!-- HeoLivePhoto: Motion Photo / .pvt thumbnail live playback (patched:
+         auto-scan removed; driven by src/scripts/live-gallery.ts via IO). -->
+    <script is:inline src="/livephoto/heolivephoto.js" defer></script>
   </head>
   <body>
+    <!-- Global fixed background: gallery image + blur + readability overlay -->
+    <div
+      class="site-bg"
+      aria-hidden="true"
+      transition:persist
+      style={{
+        "--bg-blur": `${bg.blur}px`,
+        "--bg-scale": String(bg.scale),
+        "--bg-overlay-light": `${bg.overlayLight}%`,
+        "--bg-overlay-dark": `${bg.overlayDark}%`,
+      }}
+    >
+      <img
+        class="site-bg-img"
+        src={bg.image}
+        alt=""
+        decoding="async"
+        fetchpriority="low"
+      />
+      <div class="site-bg-overlay"></div>
+    </div>
+
     <!-- Global decorative backdrop (grid, glow, cursor glow, noise) -->
     <div class="site-backdrop pointer-events-none" aria-hidden="true" transition:persist>
       <div class="site-grid"></div>
@@ -251,19 +289,74 @@ const showGrain = SITE.backdropEffects.grain;
 
     <slot />
 
+    <TocButton />
     <SearchModal />
 
     <!-- Load full theme logic -->
     <script src="../scripts/theme.ts"></script>
+
+    <!-- Live gallery engine: Fancybox bind + HeoLivePhoto IO lazy scan.
+         Bundled module → runs once; re-inits per page via astro:page-load. -->
+    <script src="../scripts/live-gallery.ts"></script>
   </body>
 </html>
 
 <style>
+  /* ─── Global blurred gallery background ─── */
+  .site-bg {
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    overflow: hidden;
+    pointer-events: none;
+    contain: strict;
+  }
+
+  .site-bg-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    /* scale 覆盖 blur 边缘，避免露底 */
+    transform: scale(var(--bg-scale, 1.08));
+    filter: blur(var(--bg-blur, 24px)) saturate(1.05);
+    will-change: transform;
+  }
+
+  .site-bg-overlay {
+    position: absolute;
+    inset: 0;
+    background: color-mix(
+      in srgb,
+      var(--background) var(--bg-overlay-light, 68%),
+      transparent
+    );
+    transition: background-color 0.35s ease;
+  }
+
+  :global(html[data-theme="dark"]) .site-bg-overlay {
+    background: color-mix(
+      in srgb,
+      var(--background) var(--bg-overlay-dark, 76%),
+      transparent
+    );
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .site-bg-img {
+      will-change: auto;
+      transform: scale(1.02);
+    }
+  }
+
   .site-backdrop {
     position: fixed;
     inset: 0;
     overflow: hidden;
     z-index: 0;
+    pointer-events: none;
     mask-image: linear-gradient(
       to bottom,
       black 0%,
@@ -338,7 +431,7 @@ const showGrain = SITE.backdropEffects.grain;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.4' numOctaves='4' stitchTiles='stitch' result='noise'/%3E%3CfeColorMatrix type='matrix' values='0.5 0 0 0 0 0 0.5 0 0 0 0 0 0.5 0 0 0 0 0 1 0' in='noise'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
     background-repeat: repeat;
     background-size: 240px 240px;
-    opacity: 0.09;
+    opacity: 0.07;
     mix-blend-mode: overlay;
     pointer-events: none;
     contain: paint;

@@ -1,0 +1,104 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Footer from "@/components/Footer.astro";
+import Breadcrumb from "@/components/Breadcrumb.astro";
+import { projects } from "@/data/projects";
+import { SITE } from "@/config";
+
+const title = "项目 | " + SITE.title;
+
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: title,
+  url: new URL("/projects/", SITE.website).toString(),
+  description: "茗辰原的自建项目与开源作品集合。",
+  isPartOf: { "@type": "WebSite", name: SITE.title, url: SITE.website },
+};
+
+// 项目封面图在旧站位于 mingcy.cn/image/*，统一补全为绝对 URL
+const imgBase = "https://mingcy.cn/";
+const resolveImg = (src: string) =>
+  src.startsWith("http") ? src : imgBase + src.replace(/^\//, "");
+---
+
+<Layout title={title} description="茗辰原的自建项目与开源作品" structuredData={structuredData}>
+  <Header />
+  <Breadcrumb />
+  <main id="main-content" class="app-layout pb-12">
+    <!-- Hero -->
+    <div class="archive-hero" data-archive-hero>
+      <div class="aurora-orb aurora-orb-1"></div>
+      <div class="aurora-orb aurora-orb-2"></div>
+      <div class="aurora-orb aurora-orb-3"></div>
+      <div class="aurora-mouse" data-archive-mouse></div>
+      <div class="relative z-10">
+        <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">
+          <span class="glow-text">Projects</span>
+        </h1>
+        <p class="mt-3 max-w-lg text-foreground/70 italic">
+          我搭建的项目与开源作品。
+        </p>
+        <div class="mt-4 flex flex-wrap items-center gap-2">
+          <span class="hero-badge">{projects.length} 个项目</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Project grid -->
+    <section class="mt-10">
+      <ul
+        class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+        role="list"
+      >
+        {
+          projects.map(p => (
+            <li class="project-card group flex flex-col overflow-hidden rounded-2xl border border-border/25 bg-foreground/[0.03] transition-all hover:-translate-y-1 hover:border-accent/40 hover:shadow-xl hover:shadow-accent/10">
+              <a href={p.demoUrl} target="_blank" rel="noopener" class="block aspect-[16/10] overflow-hidden bg-foreground/5">
+                <img
+                  src={resolveImg(p.image)}
+                  alt={p.title}
+                  class="size-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
+                  loading="lazy"
+                  decoding="async"
+                  referrerpolicy="no-referrer"
+                />
+              </a>
+              <div class="flex flex-1 flex-col p-5">
+                <h2 class="text-lg font-bold tracking-tight">
+                  <a href={p.demoUrl} target="_blank" rel="noopener" class="transition-colors group-hover:text-accent">
+                    {p.title}
+                  </a>
+                </h2>
+                <p class="mt-2 flex-1 text-sm leading-relaxed text-foreground/60">
+                  {p.description}
+                </p>
+                <div class="mt-3 flex flex-wrap gap-1.5">
+                  {p.tags.map(t => (
+                    <span class="rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+                <div class="mt-4 flex items-center gap-3 text-sm">
+                  <a href={p.demoUrl} target="_blank" rel="noopener" class="inline-flex items-center gap-1 font-medium text-accent transition-opacity hover:opacity-80">
+                    <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+                    访问
+                  </a>
+                  {p.codeUrl && (
+                    <a href={p.codeUrl} target="_blank" rel="noopener" class="inline-flex items-center gap-1 font-medium text-foreground/70 transition-colors hover:text-accent">
+                      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+                      源码
+                    </a>
+                  )}
+                </div>
+              </div>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+  </main>
+  <Footer />
+</Layout>

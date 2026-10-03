@@ -7,6 +7,8 @@ import Logo from "@/assets/logo/devosfera.svg";
 
 const currentYear = new Date().getFullYear();
 const socialHeadingId = "footer-social-heading";
+const footer = SITE.footer;
+const startTime = new Date(footer.startTime).getTime();
 
 const socialLinks = SOCIALS.map(social => ({
   ...social,
@@ -23,6 +25,7 @@ const { noMarginTop = false, class: className, ...attrs } = Astro.props;
 <footer
   class:list={["footer-wrapper", { "mt-auto": !noMarginTop }, className]}
   role="contentinfo"
+  data-start-time={startTime}
   {...attrs}
 >
   <!-- Top gradient border -->
@@ -49,7 +52,7 @@ const { noMarginTop = false, class: className, ...attrs } = Astro.props;
         <p
           class="max-w-xs text-center font-firacode text-[11px] leading-relaxed tracking-wide text-foreground/55 sm:text-start"
         >
-          A space where curiosity turns into code.
+          茶香四溢，编程世界。
         </p>
       </div>
 
@@ -94,13 +97,89 @@ const { noMarginTop = false, class: className, ...attrs } = Astro.props;
       class="mt-4 flex flex-col items-center justify-between gap-2 sm:flex-row"
     >
       <p class="font-firacode text-[11px] tracking-wide text-foreground/50">
-        &copy; {currentYear}
-        {SITE.title}. All rights reserved.
+        &copy; 2024 - {currentYear}
+        <a href="/" class="transition-colors hover:text-accent">{SITE.title}</a>.
+        <a href="/rss.xml" class="transition-colors hover:text-accent">RSS</a>
+        <span class="opacity-40">|</span>
+        <a href="/sitemap-index.xml" class="transition-colors hover:text-accent">站点地图</a>
       </p>
       <p class="font-firacode text-[11px] tracking-wide text-foreground/45">
         Made with <span class="text-accent">&#9829;</span> and lots of coffee
       </p>
     </div>
+
+    <!-- 运行时间 -->
+    <p
+      id="site-uptime"
+      class="mt-3 text-center font-firacode text-[11px] tracking-wide text-foreground/50"
+      data-site-uptime
+    >
+      本站已苟活: <span class="text-accent" data-uptime-value>-- 天 -- 时 -- 分 -- 秒</span>
+    </p>
+
+    <!-- 备案信息 -->
+    <div
+      class="mt-3 flex flex-col items-center gap-1.5 text-center font-firacode text-[11px] tracking-wide text-foreground/50 sm:flex-row sm:justify-center sm:gap-2"
+    >
+      {
+        footer.beian.icp && (
+          <a
+            href={footer.beian.icp.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="transition-colors hover:text-accent"
+          >
+            {footer.beian.icp.text}
+          </a>
+        )
+      }
+      {
+        footer.beian.police && (
+          <>
+            <span class="hidden opacity-40 sm:inline">|</span>
+            <a
+              href={footer.beian.police.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center gap-1 transition-colors hover:text-accent"
+            >
+              <svg
+                class="size-3.5 opacity-70"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+              {footer.beian.police.text}
+            </a>
+          </>
+        )
+      }
+    </div>
+
+    <!-- 徽章：EdgeOne / ASTRO -->
+    {
+      footer.badges.length > 0 && (
+        <div class="mt-4 flex flex-wrap items-center justify-center gap-2">
+          {footer.badges.map(badge => (
+            <a
+              href={badge.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="footer-badge"
+              title={badge.name}
+            >
+              {badge.name}
+            </a>
+          ))}
+        </div>
+      )
+    }
   </div>
 </footer>
 
@@ -108,11 +187,12 @@ const { noMarginTop = false, class: className, ...attrs } = Astro.props;
   .footer-wrapper {
     position: relative;
     isolation: isolate;
+    z-index: 10;
     /* Soft gradient descending to bottom */
     background: linear-gradient(
       to bottom,
-      color-mix(in srgb, var(--background) 30%, transparent),
-      color-mix(in srgb, var(--background) 80%, transparent) 80%
+      color-mix(in srgb, var(--background) 40%, transparent),
+      color-mix(in srgb, var(--background) 85%, transparent) 80%
     );
   }
 
@@ -136,6 +216,34 @@ const { noMarginTop = false, class: className, ...attrs } = Astro.props;
     box-shadow: 0 8px 20px -4px color-mix(in srgb, var(--accent) 30%, transparent);
   }
 
+  /* 徽章胶囊 */
+  .footer-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+    background: color-mix(in srgb, var(--muted) 25%, transparent);
+    font-family: var(--font-firacode), monospace;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--foreground);
+    opacity: 0.75;
+    transition:
+      opacity 0.2s ease,
+      color 0.2s ease,
+      border-color 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  .footer-badge:hover {
+    opacity: 1;
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    transform: translateY(-1px);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .footer-social-btn {
       transition: none !important;
@@ -146,5 +254,73 @@ const { noMarginTop = false, class: className, ...attrs } = Astro.props;
       transform: none;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
     }
+
+    .footer-badge:hover {
+      transform: none;
+    }
   }
 </style>
+
+<script>
+  function pad(n: number) {
+    return n.toString().padStart(2, "0");
+  }
+
+  function tickUptime() {
+    document.querySelectorAll<HTMLElement>("[data-site-uptime]").forEach(el => {
+      const start = Number(el.closest("footer")?.dataset.startTime ?? 0);
+      if (!start) return;
+      const diff = Math.max(0, Date.now() - start);
+      const days = Math.floor(diff / 86400000);
+      const hours = Math.floor((diff % 86400000) / 3600000);
+      const minutes = Math.floor((diff % 3600000) / 60000);
+      const seconds = Math.floor((diff % 60000) / 1000);
+      const value = el.querySelector("[data-uptime-value]");
+      if (value) {
+        value.textContent = `${days} 天 ${pad(hours)} 时 ${pad(minutes)} 分 ${pad(seconds)} 秒`;
+      }
+    });
+  }
+
+  tickUptime();
+  // 每秒刷新，但只在页脚可见时更新，避免后台标签页空转
+  let timer: ReturnType<typeof setInterval> | null = null;
+  const startTimer = () => {
+    if (timer) return;
+    timer = setInterval(tickUptime, 1000);
+  };
+  const stopTimer = () => {
+    if (!timer) return;
+    clearInterval(timer);
+    timer = null;
+  };
+
+  document.addEventListener("astro:page-load", () => {
+    tickUptime();
+    if (typeof IntersectionObserver === "undefined") {
+      startTimer();
+      return;
+    }
+    const footer = document.querySelector("footer[data-start-time]");
+    if (!footer) {
+      stopTimer();
+      return;
+    }
+    const io = new IntersectionObserver(
+      entries => {
+        if (entries.some(e => e.isIntersecting)) startTimer();
+        else stopTimer();
+      },
+      { rootMargin: "80px" }
+    );
+    io.observe(footer);
+    document.addEventListener(
+      "astro:before-swap",
+      () => {
+        io.disconnect();
+        stopTimer();
+      },
+      { once: true }
+    );
+  });
+</script>

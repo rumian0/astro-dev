@@ -33,7 +33,9 @@ const { title, description, pubDatetime } = data;
 const modDatetime = "modDatetime" in data ? data.modDatetime : null;
 const timezone = "timezone" in data ? data.timezone : undefined;
 const tags = "tags" in data ? data.tags : [];
-const href = getEntryPath({ collection, id, filePath });
+const categories = "categories" in data ? data.categories : undefined;
+const category = Array.isArray(categories) && categories.length ? categories[0] : undefined;
+const href = getEntryPath({ collection, id, filePath, data });
 const isGallery = collection === "galleries";
 const headingId = `${collection}-${slugifyStr(String(id))}-title`;
 const descriptionId = `${collection}-${slugifyStr(String(id))}-description`;
@@ -92,30 +94,30 @@ if (SITE.showCoverImages) {
 
     // Default posts styling
     !isGallery && !featured && [
-      "border-border/25 bg-muted/10",
-      "hover:border-accent/40 hover:bg-accent/5 focus-within:border-accent/40 focus-within:bg-accent/5",
+      "border-border/30 bg-background/70",
+      "hover:border-accent/40 hover:bg-accent/8 focus-within:border-accent/40 focus-within:bg-accent/8",
       "hover:shadow-accent/10 focus-within:shadow-accent/10",
     ],
 
     // Featured generic posts styling
     !isGallery && featured && [
-      "border-amber-500/30 bg-amber-500/5",
-      "hover:border-amber-500/50 hover:bg-amber-500/10 focus-within:border-amber-500/50 focus-within:bg-amber-500/10",
+      "border-amber-500/30 bg-background/75",
+      "hover:border-amber-500/50 hover:bg-amber-500/8 focus-within:border-amber-500/50 focus-within:bg-amber-500/8",
       "hover:shadow-amber-500/10 focus-within:shadow-amber-500/10",
       "shadow-[0_0_20px_-5px_rgba(245,158,11,0.15)]",
     ],
 
     // Gallery variant styling
     isGallery && !featured && [
-      "border-purple-500/20 bg-purple-500/5",
-      "hover:border-purple-500/40 hover:bg-purple-500/10 focus-within:border-purple-500/40 focus-within:bg-purple-500/10",
+      "border-purple-500/25 bg-background/70",
+      "hover:border-purple-500/40 hover:bg-purple-500/8 focus-within:border-purple-500/40 focus-within:bg-purple-500/8",
       "hover:shadow-purple-500/10 focus-within:shadow-purple-500/10",
     ],
 
     // Featured gallery styling
     isGallery && featured && [
-      "border-purple-500/40 bg-purple-500/10",
-      "hover:border-purple-500/60 hover:bg-purple-500/15 focus-within:border-purple-500/60 focus-within:bg-purple-500/15",
+      "border-purple-500/40 bg-background/75",
+      "hover:border-purple-500/60 hover:bg-purple-500/12 focus-within:border-purple-500/60 focus-within:bg-purple-500/12",
       "hover:shadow-purple-500/20 focus-within:shadow-purple-500/20",
       "shadow-[0_0_20px_-5px_rgba(168,85,247,0.15)]",
     ],
@@ -207,11 +209,26 @@ if (SITE.showCoverImages) {
       {description}
     </p>
 
-    <!-- Tags -->
-    {SITE.showTagsInCards && tags.length > 0 && (
-      <ul class="relative z-20 mt-3 flex flex-wrap gap-1.5 pointer-events-auto">
-        {tags.slice(0, 4).map((tag: string) => (
-          <li>
+    <!-- 分类 + Tags（同一行） -->
+    {(category && !isGallery) || (SITE.showTagsInCards && tags.length > 0) ? (
+      <div class="relative z-20 mt-3 flex flex-wrap items-center gap-1.5 pointer-events-auto">
+        {!isGallery && category && (
+          <a
+            href={`/categories/#cat-${slugifyStr(category)}`}
+            class:list={[
+              "category-badge inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1",
+              featured
+                ? "bg-amber-500/10 text-amber-500/90 ring-amber-500/20 hover:bg-amber-500/20"
+                : "bg-accent/10 text-accent ring-accent/15 hover:bg-accent/20 hover:ring-accent/30",
+              "transition-colors duration-200",
+            ]}
+          >
+            <svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v2z"></path><path d="M21 14H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h7l2 2h8a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1z"></path></svg>
+            {category}
+          </a>
+        )}
+        {SITE.showTagsInCards &&
+          tags.slice(0, 5).map((tag: string) => (
             <a
               href={`/tags/${slugifyStr(tag)}/`}
               class:list={[
@@ -227,16 +244,16 @@ if (SITE.showCoverImages) {
             >
               <span aria-hidden="true" class="opacity-60">#</span>{tag}
             </a>
-          </li>
-        ))}
-      </ul>
-    )}
+          ))}
+      </div>
+    ) : null}
   </div>
 </li>
 
 <style>
   .card-glow {
     contain: paint;
+    /* 半透明底已在 class 上（bg-background/70），不再逐卡 backdrop-filter，避免合成层过多 */
   }
 
   .card-glow-effect {
@@ -265,6 +282,13 @@ if (SITE.showCoverImages) {
     overflow: hidden;
     /* Clamp height so tall viewports don't blow up the card */
     max-height: 220px;
+  }
+
+  /* 移动端默认不展示头图（仿旧站 card-cover-mobile-hidden） */
+  @media (max-width: 640px) {
+    .card-cover-wrapper {
+      display: none;
+    }
   }
 
   .card-cover-img {

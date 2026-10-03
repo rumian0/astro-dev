@@ -1,15 +1,24 @@
 import { defineConfig, envField, fontProviders } from "astro/config";
 import mdx from "@astrojs/mdx";
+import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 import sitemap from "@astrojs/sitemap";
 import remarkToc from "remark-toc";
 import remarkCollapse from "remark-collapse";
+import remarkMath from "remark-math";
+import remarkIns from "remark-ins";
+import remarkSupersub from "remark-supersub";
+import remarkDirective from "remark-directive";
+import rehypeKatex from "rehype-katex";
 import {
   transformerNotationDiff,
   transformerNotationHighlight,
   transformerNotationWordHighlight,
 } from "@shikijs/transformers";
 import { transformerFileName } from "./src/utils/transformers/fileName";
+import { remarkEmbed } from "./src/plugins/remarkEmbed";
+import { rehypeSpoiler } from "./src/plugins/rehypeSpoiler";
+import { rehypeMark } from "./src/plugins/rehypeMark";
 import { SITE } from "./src/config";
 
 // https://astro.build/config
@@ -20,6 +29,7 @@ export default defineConfig({
     defaultStrategy: "hover",
   },
   integrations: [
+    react(),
     mdx({
       extendMarkdownConfig: true,
     }),
@@ -28,7 +38,17 @@ export default defineConfig({
     }),
   ],
   markdown: {
-    remarkPlugins: [remarkToc, [remarkCollapse, { test: "Table of contents" }]],
+    remarkPlugins: [
+      remarkToc,
+      [remarkCollapse, { test: "Table of contents" }],
+      remarkMath,
+      remarkIns,
+      // remark-supersub ships loose types (returns a bare Transformer); cast to satisfy unified's Plugin typing
+      remarkSupersub as any,
+      remarkDirective,
+      remarkEmbed,
+    ],
+    rehypePlugins: [rehypeKatex, rehypeSpoiler, rehypeMark],
     shikiConfig: {
       // For more themes, visit https://shiki.style/themes
       themes: { light: "min-light", dark: "github-dark-default" },
@@ -43,7 +63,7 @@ export default defineConfig({
     },
   },
   vite: {
-    plugins: [tailwindcss()],
+    plugins: [tailwindcss() as any],
     optimizeDeps: {
       exclude: ["@resvg/resvg-js"],
     },
@@ -60,9 +80,6 @@ export default defineConfig({
         optional: true,
       }),
       // ── Personal / social links ──────────────────────────────────────────
-      // Set these in .env (never commit personal data to the repo).
-      // Any variable left unset will simply hide that social link.
-      // See .env.example for the full list.
       PUBLIC_SOCIAL_GITHUB: envField.string({
         access: "public",
         context: "client",
@@ -87,6 +104,12 @@ export default defineConfig({
       PUBLIC_EDIT_POST_URL: envField.string({
         access: "public",
         context: "client",
+        optional: true,
+      }),
+      // AI summary endpoint (build-time, server only)
+      AI_CHAT_URL: envField.string({
+        access: "public",
+        context: "server",
         optional: true,
       }),
     },

@@ -1,0 +1,137 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Footer from "@/components/Footer.astro";
+import Breadcrumb from "@/components/Breadcrumb.astro";
+import { friendLinks } from "@/data/links";
+import { SITE } from "@/config";
+
+if (!SITE.showLinks) {
+  return Astro.redirect("/404");
+}
+
+const totalLinks = friendLinks.reduce((n, cat) => n + cat.links.length, 0);
+
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: `Links | ${SITE.title}`,
+  url: new URL("/links/", SITE.website).toString(),
+  description: "Friend links — blogs and sites I enjoy.",
+  isPartOf: { "@type": "WebSite", name: SITE.title, url: SITE.website },
+};
+---
+
+<Layout
+  title={`Links | ${SITE.title}`}
+  description="友链 — 我喜欢的朋友们与博客"
+  structuredData={structuredData}
+>
+  <Header />
+  <Breadcrumb />
+  <main id="main-content" class="app-layout pb-12">
+    <!-- Hero (reuses .archive-hero from global.css) -->
+    <div class="archive-hero" data-archive-hero>
+      <div class="aurora-orb aurora-orb-1"></div>
+      <div class="aurora-orb aurora-orb-2"></div>
+      <div class="aurora-orb aurora-orb-3"></div>
+      <div class="aurora-mouse" data-archive-mouse></div>
+      <div class="relative z-10">
+        <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">
+          <span class="glow-text">Links</span>
+        </h1>
+        <p class="mt-3 max-w-lg text-foreground/70 italic">
+          朋友们与喜欢的站点。
+        </p>
+        <div class="mt-4 flex flex-wrap items-center gap-2">
+          <span class="hero-badge"
+            >{totalLinks}
+            {totalLinks === 1 ? "friend" : "friends"}</span
+          >
+          <a
+            href="/links/fcircle/"
+            class="hero-badge inline-flex items-center gap-1 transition-colors hover:border-accent/40 hover:text-accent"
+          >
+            <svg
+              class="size-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              ><circle cx="12" cy="12" r="10"></circle>
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
+              <circle cx="12" cy="12" r="3"></circle></svg
+            >
+            友圈
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Friend groups -->
+    {
+      friendLinks.map(cat => (
+        <section class="mt-10 first:mt-8">
+          <h2 class="mb-4 flex items-baseline gap-3">
+            <span class="text-xl font-bold tracking-tight text-foreground">
+              {cat.title}
+            </span>
+            <span class="text-xs font-firacode text-foreground/40">
+              {cat.links.length}
+            </span>
+            <span class="h-px flex-1 bg-border/20" />
+          </h2>
+
+          <ul
+            class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            role="list"
+          >
+            {cat.links.map(link => (
+              <li>
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener"
+                  class="friend-card group flex items-center gap-4 rounded-xl border border-border/25 bg-foreground/[0.03] p-4 transition-all hover:-translate-y-1 hover:border-accent/40 hover:shadow-lg hover:shadow-accent/10"
+                >
+                  {link.avatar && (
+                    <img
+                      src={link.avatar}
+                      alt={link.name}
+                      class="friend-avatar size-12 flex-shrink-0 rounded-full object-cover bg-foreground/5"
+                      loading="lazy"
+                      decoding="async"
+                      referrerpolicy="no-referrer"
+                    />
+                  )}
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate font-medium transition-colors group-hover:text-accent">
+                      {link.name}
+                    </p>
+                    {link.desc && (
+                      <p class="mt-0.5 line-clamp-2 text-sm text-foreground/55">
+                        {link.desc}
+                      </p>
+                    )}
+                  </div>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))
+    }
+  </main>
+  <Footer />
+</Layout>
+
+<style>
+  .friend-avatar {
+    transition: transform 0.3s ease;
+  }
+  .friend-card:hover .friend-avatar {
+    transform: scale(1.08);
+  }
+</style>

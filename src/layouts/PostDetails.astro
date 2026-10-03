@@ -9,7 +9,8 @@ import ShareLinks from "@/components/ShareLinks.astro";
 import Breadcrumb from "@/components/Breadcrumb.astro";
 import BackToTopButton from "@/components/BackToTopButton.astro";
 import GalleryEmbed from "@/components/GalleryEmbed.astro";
-import { getPath } from "@/utils/getPath";
+import LinkCard from "@/components/LinkCard.astro";
+import { getPostPath } from "@/utils/getPath";
 import { slugifyStr } from "@/utils/slugify";
 import { getReadingTime } from "@/utils/readingTime";
 import { SITE } from "@/config";
@@ -48,7 +49,7 @@ if (typeof initOgImage === "string") {
 
 // Use dynamic OG image if enabled and no remote|local ogImage
 if (!ogImageUrl && SITE.dynamicOgImage) {
-  ogImageUrl = `${getPath(post.id, post.filePath)}/index.png`;
+  ogImageUrl = `${getPostPath(post)}index.png`;
 }
 
 // Resolve OG image URL (or fallback to SITE.ogImage / default `og.png`)
@@ -67,12 +68,24 @@ const layoutProps = {
   scrollSmooth: true,
 };
 
+// 文章头图：coverImage 优先，其次 ogImage / 动态 OG（配置 showCoverImages 控制）
+let postCover: string | undefined;
+if (SITE.showCoverImages) {
+  const coverImage = (post.data as { coverImage?: { src?: string } }).coverImage;
+  if (typeof coverImage?.src === "string") {
+    postCover = coverImage.src;
+  } else if (ogImage) {
+    postCover = ogImage;
+  }
+}
+
 /* ========== Prev/Next Posts ========== */
 
-const allPosts = posts.map(({ data: { title }, id, filePath }) => ({
+const allPosts = posts.map(({ data: { title, pubDatetime }, id, filePath }) => ({
   id,
   title,
   filePath,
+  data: { pubDatetime },
 }));
 
 const currentPostIndex = allPosts.findIndex(a => a.id === post.id);
@@ -94,6 +107,25 @@ const nextPost =
     <header class="post-header relative mb-10 text-center">
       <div class="post-hero-bg"></div>
       <div class="relative z-10 rounded-3xl border border-border/20 bg-muted/5 px-6 py-8 backdrop-blur-md sm:px-10 sm:py-12">
+        <!-- Cover image (文章头图) -->
+        {
+          postCover && (
+            <div class="post-cover mb-8 overflow-hidden rounded-2xl border border-border/20">
+              <img
+                src={postCover}
+                alt={title}
+                class="post-cover-img"
+                loading="eager"
+                decoding="async"
+                fetchpriority="high"
+                width="1200"
+                height="630"
+                onerror="this.closest('.post-cover')?.remove()"
+              />
+            </div>
+          )
+        }
+
         <!-- Title -->
         <h1
           transition:name={slugifyStr(title)}
@@ -203,9 +235,9 @@ const nextPost =
 
     <article
       id="article"
-      class="app-prose mt-8 w-full max-w-app prose-pre:bg-(--shiki-light-bg) dark:prose-pre:bg-(--shiki-dark-bg)"
+      class="app-prose mt-8 w-full max-w-app prose-pre:bg-(--shiki-light-bg) dark:prose-pre:bg-(--shiki-dark-bg) article-panel"
     >
-      <Content components={{ GalleryEmbed }} />
+      <Content components={{ GalleryEmbed, LinkCard }} />
     </article>
 
     <!-- ═══════ Post footer section ═══════ -->
@@ -261,7 +293,7 @@ const nextPost =
       {
         prevPost ? (
           <a
-            href={getPath(prevPost.id, prevPost.filePath)}
+            href={getPostPath(prevPost)}
             class="post-nav-link group relative flex flex-col gap-1 rounded-2xl border border-border/20 px-5 py-4 transition-all duration-300 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5"
           >
             <div class="post-nav-bg" />
@@ -293,7 +325,7 @@ const nextPost =
       {
         nextPost && (
           <a
-            href={getPath(nextPost.id, nextPost.filePath)}
+            href={getPostPath(nextPost)}
             class="post-nav-link group relative col-start-2 flex flex-col items-end gap-1 rounded-2xl border border-border/20 px-5 py-4 text-end transition-all duration-300 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5"
           >
             <div class="post-nav-bg" />
@@ -453,6 +485,53 @@ const nextPost =
 </script>
 
 <style>
+  /* 文章正文玻璃面板：全局背景图上保证可读 */
+  .article-panel {
+    position: relative;
+    padding: 1.25rem 1rem 1.5rem;
+    border-radius: 1.25rem;
+    background: color-mix(in srgb, var(--background) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 25%, transparent);
+    box-shadow: 0 8px 32px -12px rgb(0 0 0 / 0.08);
+  }
+
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .article-panel {
+      backdrop-filter: blur(10px) saturate(120%);
+      -webkit-backdrop-filter: blur(10px) saturate(120%);
+    }
+  }
+
+  @media (min-width: 640px) {
+    .article-panel {
+      padding: 1.75rem 2rem 2rem;
+    }
+  }
+
+  /* 文章头图 */
+  .post-cover {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1200 / 630;
+    max-height: 360px;
+    background: color-mix(in srgb, var(--muted) 20%, transparent);
+  }
+
+  .post-cover-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+  }
+
+  /* 移动端默认不展示头图 */
+  @media (max-width: 640px) {
+    .post-cover {
+      display: none;
+    }
+  }
+
   .post-title {
     background: linear-gradient(
       135deg,

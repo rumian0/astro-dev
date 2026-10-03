@@ -1,0 +1,806 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Footer from "@/components/Footer.astro";
+import Breadcrumb from "@/components/Breadcrumb.astro";
+import { SITE } from "@/config";
+
+const title = "友圈 | " + SITE.title;
+
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: title,
+  url: new URL("/links/fcircle/", SITE.website).toString(),
+  description: "Friend Circle — aggregated feed of friends' latest posts.",
+  isPartOf: { "@type": "WebSite", name: SITE.title, url: SITE.website },
+};
+
+// Friend-Circle-Lite 后端（fc.mingcy.cn/all.json）提供：
+//   statistical_data: { friends_num, active_num, error_num, article_num, last_updated_time }
+//   article_data: [{ title, created, link, author, avatar }]
+const API_URL = "https://fc.mingcy.cn/all.json";
+const PAGE_SIZE = 24;
+
+// 构建时预取数据并内联（避免首屏客户端请求等待）；构建失败则回退客户端 fetch
+let preData: {
+  statistical_data?: {
+    friends_num?: number;
+    active_num?: number;
+    error_num?: number;
+    article_num?: number;
+    last_updated_time?: string;
+  };
+  article_data?: {
+    title: string;
+    created: string;
+    link: string;
+    author: string;
+    avatar: string;
+  }[];
+} | null = null;
+try {
+  const res = await fetch(API_URL, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (res.ok) {
+    const json = await res.json();
+    if (Array.isArray(json?.article_data) && json.article_data.length) preData = json;
+  }
+} catch {
+  // 构建环境无外网/超时：客户端再拉取
+}
+
+// 内联 JSON（转义 </script> 防注入）
+const inlineData = preData ? JSON.stringify(preData).replace(/<\//g, "<\\/") : null;
+---
+
+<Layout title={title} description="友圈 — 聚合友链站点的最新文章" structuredData={structuredData}>
+  <Header />
+  <Breadcrumb />
+  <main id="main-content" class="app-layout pb-12">
+    <!-- Hero -->
+    <div class="archive-hero" data-archive-hero>
+      <div class="aurora-orb aurora-orb-1"></div>
+      <div class="aurora-orb aurora-orb-2"></div>
+      <div class="aurora-orb aurora-orb-3"></div>
+      <div class="aurora-mouse" data-archive-mouse></div>
+      <div class="relative z-10">
+        <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">
+          <span class="glow-text">Friend Circle</span>
+        </h1>
+        <p class="mt-3 max-w-lg text-foreground/70 italic">
+          聚合友链站点的最新动态。
+        </p>
+      </div>
+    </div>
+
+    <!-- ═══ fc shell（自定义 .fc-* 友圈，仿清羽 blog.liushen.fun/fcircle）═══ -->
+    {
+      inlineData && (
+        <script
+          type="application/json"
+          id="fc-preload"
+          set:html={inlineData}
+        ></script>
+      )
+    }
+    <section class="fc-shell" data-fc-shell>
+      <!-- 随机文章 -->
+      <article class="fc-random sidebar-card" data-fc-random hidden>
+        <p class="fc-kicker">随缘读到</p>
+        <div class="fc-random-panel">
+          <div class="fc-random-content">
+            <a class="fc-random-title" target="_blank" rel="noopener"></a>
+            <p class="fc-random-info"></p>
+          </div>
+          <div class="fc-random-actions">
+            <button type="button" data-fc-random-btn>换一换</button>
+          </div>
+        </div>
+      </article>
+
+      <!-- 统计 -->
+      <div class="fc-stats" data-fc-stats hidden></div>
+
+      <!-- 文章卡片墙 -->
+      <div class="fc-grid" data-fc-grid hidden></div>
+
+      <!-- 加载更多 -->
+      <button type="button" class="fc-more" data-fc-more hidden>加载更多</button>
+
+      <!-- 尾部说明 -->
+      <p class="fc-meta" data-fc-meta hidden></p>
+
+      <!-- 加载 / 错误态 -->
+      <div class="fc-loading" data-fc-loading>
+        <span class="fc-spinner" aria-hidden="true"></span>
+        <span>正在加载友圈动态…</span>
+      </div>
+    </section>
+  </main>
+
+  <!-- ═══ 作者弹窗 ═══ -->
+  <div class="fc-modal" data-fc-modal role="dialog" aria-modal="true" aria-label="作者动态">
+    <div class="fc-modal-card">
+      <img class="fc-modal-bg" alt="" aria-hidden="true" />
+      <img class="fc-modal-avatar" alt="" />
+      <a class="fc-modal-link" target="_blank" rel="noopener"></a>
+      <div class="fc-modal-posts" data-fc-modal-posts></div>
+    </div>
+  </div>
+
+  <Footer />
+</Layout>
+
+<style is:global>
+  /* ═══ fc-shell：仿清羽 blog.liushen.fun/fcircle 的自定义友圈 ═══ */
+  .fc-shell {
+    margin-top: 1.5rem;
+  }
+
+  .sidebar-card {
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+    background: color-mix(in srgb, var(--foreground) 3%, var(--background));
+  }
+
+  /* ── 加载 / 错误 ── */
+  .fc-loading,
+  .fc-error {
+    min-height: 10rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.9375rem;
+    color: color-mix(in srgb, var(--foreground) 58%, transparent);
+  }
+  .fc-spinner {
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 999px;
+    border: 2px solid color-mix(in srgb, var(--border) 25%, transparent);
+    border-top-color: var(--accent);
+    animation: fc-spin 0.8s linear infinite;
+  }
+  @keyframes fc-spin {
+    to { transform: rotate(360deg); }
+  }
+  .fc-error {
+    flex-direction: column;
+  }
+  .fc-error button,
+  .fc-more,
+  .fc-random-actions button {
+    border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 0.45rem 0.9rem;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: border-color 0.18s, background-color 0.18s, transform 0.18s;
+  }
+  .fc-error button:hover,
+  .fc-more:hover,
+  .fc-random-actions button:hover {
+    border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+    background: color-mix(in srgb, var(--accent) 13%, transparent);
+    transform: translateY(-1px);
+  }
+
+  /* ── 随机文章 ── */
+  .fc-random {
+    padding: 1rem;
+  }
+  .fc-kicker {
+    color: color-mix(in srgb, var(--accent) 76%, transparent);
+    font-family: var(--font-firacode), monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 0.875rem;
+    font-weight: 700;
+    margin: 0;
+  }
+  .fc-random-panel {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 1rem;
+    margin-top: 0.9rem;
+  }
+  .fc-random-content {
+    min-width: 0;
+  }
+  .fc-random-title {
+    color: var(--foreground);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-top: 0.3rem;
+    font-size: 1.15rem;
+    font-weight: 800;
+    line-height: 1.45;
+    text-decoration: none;
+    transition: color 0.18s;
+  }
+  .fc-random-title:hover {
+    color: var(--accent);
+  }
+  .fc-random-info {
+    color: color-mix(in srgb, var(--foreground) 56%, transparent);
+    margin-top: 0.4rem;
+    font-size: 0.9375rem;
+  }
+  .fc-random-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  /* ── 统计 ── */
+  .fc-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+    margin-top: 1.25rem;
+  }
+  .fc-stat {
+    border: 1px solid color-mix(in srgb, var(--border) 18%, transparent);
+    background: color-mix(in srgb, var(--foreground) 4%, var(--background));
+    text-align: center;
+    border-radius: 0.9rem;
+    padding: 0.85rem 1rem;
+  }
+  .fc-stat strong {
+    color: var(--accent);
+    font-family: var(--font-firacode), monospace;
+    font-size: 1.35rem;
+    line-height: 1;
+    display: block;
+  }
+  .fc-stat span {
+    color: color-mix(in srgb, var(--foreground) 58%, transparent);
+    margin-top: 0.35rem;
+    font-size: 0.875rem;
+    display: block;
+  }
+
+  /* ── 卡片墙 ── */
+  .fc-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+    margin-top: 1rem;
+  }
+  .fc-card {
+    position: relative;
+    min-height: 7.3rem;
+    padding: 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--border) 18%, transparent);
+    background: color-mix(in srgb, var(--foreground) 4%, var(--background));
+    border-radius: 1rem;
+    overflow: hidden;
+    text-decoration: none;
+    display: block;
+    animation: fc-card-in 0.35s both;
+    transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s;
+  }
+  @keyframes fc-card-in {
+    0% { opacity: 0; transform: translateY(0.8rem); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .fc-card:before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    opacity: 0;
+    background: radial-gradient(
+      300px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+      color-mix(in srgb, var(--accent) 8%, transparent),
+      transparent 65%
+    );
+    pointer-events: none;
+    transition: opacity 0.22s;
+  }
+  .fc-card:hover:before {
+    opacity: 1;
+  }
+  .fc-card:hover {
+    border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+    box-shadow: 0 12px 28px -22px color-mix(in srgb, var(--accent) 60%, transparent);
+    transform: translateY(-2px);
+  }
+  .fc-card-title {
+    position: relative;
+    z-index: 2;
+    color: var(--foreground);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 0.92rem;
+    font-weight: 750;
+    line-height: 1.5;
+    text-decoration: none;
+    transition: color 0.18s;
+  }
+  .fc-card-title:hover {
+    color: var(--accent);
+  }
+  .fc-author {
+    position: absolute;
+    z-index: 2;
+    bottom: 0.75rem;
+    left: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    max-width: calc(100% - 7.5rem);
+    padding: 0.25rem 0.65rem 0.25rem 0.3rem;
+    border: 1px solid color-mix(in srgb, var(--border) 18%, transparent);
+    background: color-mix(in srgb, var(--background) 72%, transparent);
+    color: color-mix(in srgb, var(--foreground) 68%, transparent);
+    border-radius: 999px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: border-color 0.18s, color 0.18s;
+  }
+  .fc-author:hover {
+    border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+    color: var(--accent);
+  }
+  .fc-author img {
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 999px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  .fc-author span {
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .fc-date {
+    position: absolute;
+    z-index: 2;
+    bottom: 0.92rem;
+    right: 0.85rem;
+    color: color-mix(in srgb, var(--foreground) 48%, transparent);
+    font-family: var(--font-firacode), monospace;
+    font-size: 0.875rem;
+  }
+  .fc-card-bg {
+    position: absolute;
+    z-index: 0;
+    bottom: -1.5rem;
+    right: -1rem;
+    width: 6.5rem;
+    height: 6.5rem;
+    object-fit: cover;
+    filter: saturate(0.9);
+    border-radius: 999px;
+    opacity: 0.22;
+    transition: opacity 0.25s, transform 0.35s;
+  }
+  .fc-card:hover .fc-card-bg {
+    transform: scale(1.08) translate(-0.25rem, -0.25rem);
+  }
+
+  /* ── 加载更多 ── */
+  .fc-more {
+    display: flex;
+    justify-content: center;
+    min-width: 9rem;
+    margin: 1.4rem auto 0;
+  }
+
+  /* ── 尾部 ── */
+  .fc-meta {
+    max-width: 100%;
+    color: color-mix(in srgb, var(--foreground) 38%, transparent);
+    font-family: var(--font-firacode), monospace;
+    text-align: right;
+    margin: 1rem 0 0 auto;
+    font-size: 0.875rem;
+    line-height: 1.7;
+  }
+  .fc-meta a {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--foreground) 22%, transparent);
+    text-underline-offset: 0.18em;
+    transition: color 0.18s, text-decoration-color 0.18s;
+  }
+  .fc-meta a:hover {
+    color: var(--accent);
+    text-decoration-color: var(--accent);
+  }
+
+  /* ── 作者弹窗 ── */
+  .fc-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: color-mix(in srgb, var(--background) 52%, transparent);
+    backdrop-filter: blur(18px) saturate(130%);
+    -webkit-backdrop-filter: blur(18px) saturate(130%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .fc-modal.fc-modal-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .fc-modal-card {
+    position: relative;
+    width: min(90vw, 24rem);
+    border: 1px solid color-mix(in srgb, var(--border) 22%, transparent);
+    background: color-mix(in srgb, var(--background) 88%, var(--background));
+    border-radius: 1.2rem;
+    padding: 1.1rem;
+    box-shadow: 0 20px 70px -36px color-mix(in srgb, var(--accent) 55%, transparent);
+    overflow: hidden;
+    transform: translateY(0.75rem) scale(0.98);
+    transition: transform 0.2s;
+  }
+  .fc-modal.fc-modal-open .fc-modal-card {
+    transform: translateY(0) scale(1);
+  }
+  .fc-modal-bg {
+    position: absolute;
+    z-index: 0;
+    bottom: -2.2rem;
+    right: -2.6rem;
+    width: 12rem;
+    height: 12rem;
+    object-fit: cover;
+    filter: blur(6px) saturate(1.05);
+    border-radius: 999px 999px 0;
+    opacity: 0.16;
+    pointer-events: none;
+  }
+  .fc-modal-avatar,
+  .fc-modal-card > a,
+  .fc-modal-posts {
+    position: relative;
+    z-index: 1;
+  }
+  .fc-modal-avatar {
+    display: block;
+    width: 5.4rem;
+    height: 5.4rem;
+    margin: 0 auto;
+    object-fit: cover;
+    border: 2px solid color-mix(in srgb, var(--border) 36%, transparent);
+    border-radius: 999px;
+    transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s;
+  }
+  .fc-modal-avatar:hover {
+    border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+    box-shadow: 0 10px 28px -20px color-mix(in srgb, var(--accent) 80%, transparent);
+    transform: translateY(-1px);
+  }
+  .fc-modal-card > a {
+    display: block;
+    color: var(--foreground);
+    text-align: center;
+    margin-top: 0.65rem;
+    font-weight: 800;
+    text-decoration: none;
+    transition: color 0.18s;
+  }
+  .fc-modal-card > a:hover {
+    color: var(--accent);
+  }
+  .fc-modal-posts {
+    display: grid;
+    gap: 0.55rem;
+    margin-top: 1rem;
+  }
+  .fc-modal-post {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--border) 16%, transparent);
+    background: color-mix(in srgb, var(--foreground) 4%, transparent);
+    border-radius: 0.85rem;
+    padding: 0.75rem 0.75rem 1.85rem;
+    text-decoration: none;
+    transition: border-color 0.18s, background-color 0.18s, box-shadow 0.18s, transform 0.18s;
+  }
+  .fc-modal-post:before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent 62%);
+    pointer-events: none;
+    transition: opacity 0.18s;
+  }
+  .fc-modal-post:hover,
+  .fc-modal-post:focus-visible {
+    border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+    background: color-mix(in srgb, var(--accent) 5%, transparent);
+    box-shadow: 0 12px 28px -22px color-mix(in srgb, var(--accent) 60%, transparent);
+    outline: none;
+    transform: translateY(-2px);
+  }
+  .fc-modal-post:hover:before,
+  .fc-modal-post:focus-visible:before {
+    opacity: 1;
+  }
+  .fc-modal-post span {
+    position: relative;
+    z-index: 1;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 2.7rem;
+    color: var(--foreground);
+    font-size: 0.9375rem;
+    font-weight: 650;
+    line-height: 1.5;
+  }
+  .fc-modal-post time {
+    position: absolute;
+    z-index: 1;
+    bottom: 0.55rem;
+    right: 0.75rem;
+    color: color-mix(in srgb, var(--foreground) 48%, transparent);
+    font-family: var(--font-firacode), monospace;
+    font-size: 0.875rem;
+  }
+
+  @media (width >= 640px) {
+    .fc-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .fc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (width >= 1024px) {
+    .fc-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (width >= 1280px) {
+    .fc-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+  @media (width <= 560px) {
+    .fc-random-panel { flex-direction: column; align-items: stretch; }
+    .fc-random-actions { justify-content: flex-start; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fc-spinner, .fc-card { animation: none; }
+    .fc-card, .fc-card-bg, .fc-more, .fc-random-actions button { transition: none; }
+  }
+</style>
+
+<script>
+  // ═══ 友圈数据加载与渲染（fc.mingcy.cn/all.json）═══
+  const API = "https://fc.mingcy.cn/all.json";
+  const PAGE_SIZE = 24;
+
+  let allArticles: { title: string; created: string; link: string; author: string; avatar: string }[] = [];
+  let shownCount = 0;
+  let randomIdx = -1;
+
+  const shell = document.querySelector("[data-fc-shell]");
+  if (!shell) throw new Error("fc-shell missing");
+
+  const $ = <T extends HTMLElement>(sel: string) => shell.querySelector<T>(sel);
+
+  const randomEl = $("[data-fc-random]")!;
+  const statsEl = $("[data-fc-stats]")!;
+  const gridEl = $("[data-fc-grid]")!;
+  const moreEl = $("[data-fc-more]")!;
+  const metaEl = $("[data-fc-meta]")!;
+  const loadingEl = $("[data-fc-loading]")!;
+
+  const esc = (t: string) => {
+    const d = document.createElement("div");
+    d.textContent = t;
+    return d.innerHTML;
+  };
+
+  function renderStats(s: {
+    friends_num: number;
+    active_num: number;
+    error_num: number;
+    article_num: number;
+    last_updated_time: string;
+  }) {
+    const stats = [
+      { v: s.friends_num, l: "友链" },
+      { v: s.active_num, l: "活跃" },
+      { v: s.error_num, l: "异常" },
+      { v: s.article_num, l: "文章" },
+    ];
+    statsEl.innerHTML = stats
+      .map(st => `<div class="fc-stat"><strong>${st.v}</strong><span>${st.l}</span></div>`)
+      .join("");
+    statsEl.hidden = false;
+    metaEl.innerHTML =
+      `数据更新于 <b>${esc(s.last_updated_time)}</b> · 数据来自 ` +
+      `<a href="https://fc.mingcy.cn/" target="_blank" rel="noopener">Friend-Circle-Lite</a>`;
+    metaEl.hidden = false;
+  }
+
+  function renderRandom() {
+    if (allArticles.length === 0) return;
+    let idx = Math.floor(Math.random() * allArticles.length);
+    if (idx === randomIdx && allArticles.length > 1) {
+      idx = (idx + 1) % allArticles.length;
+    }
+    randomIdx = idx;
+    const a = allArticles[idx];
+    const title = randomEl.querySelector(".fc-random-title") as HTMLAnchorElement;
+    title.href = a.link;
+    title.textContent = a.title;
+    const info = randomEl.querySelector(".fc-random-info") as HTMLElement;
+    info.innerHTML = `${esc(a.author)} · ${esc(a.created)}`;
+    randomEl.hidden = false;
+  }
+
+  function renderGrid() {
+    const items = allArticles.slice(0, shownCount);
+    gridEl.innerHTML = items
+      .map((a, i) => {
+        const onErr = `onerror="this.style.display='none'"`;
+        return (
+          `<article class="fc-card" style="animation-delay:${Math.min(i * 0.02, 0.4)}s">
+             <a class="fc-card-title" href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.title)}</a>
+             <button type="button" class="fc-author" data-author="${esc(a.author)}" title="查看 ${esc(a.author)} 的最近文章">
+               <img src="${esc(a.avatar)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" ${onErr}>
+               <span>${esc(a.author)}</span>
+             </button>
+             <time class="fc-date">${esc(a.created)}</time>
+             <img class="fc-card-bg" src="${esc(a.avatar)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" ${onErr}>
+           </article>`
+        );
+      })
+      .join("");
+    moreEl.hidden = shownCount >= allArticles.length;
+  }
+
+  function renderMore() {
+    const next = shownCount + PAGE_SIZE;
+    shownCount = Math.min(next, allArticles.length);
+    renderGrid();
+  }
+
+  function openModal(author: string) {
+    const modal = document.querySelector("[data-fc-modal]") as HTMLElement;
+    const posts = modal.querySelector("[data-fc-modal-posts]") as HTMLElement;
+    const avatar = modal.querySelector(".fc-modal-avatar") as HTMLImageElement;
+    const bg = modal.querySelector(".fc-modal-bg") as HTMLImageElement;
+    const link = modal.querySelector(".fc-modal-link") as HTMLAnchorElement;
+
+    const mine = allArticles.filter(a => a.author === author);
+    const first = mine[0];
+
+    if (first) {
+      avatar.src = first.avatar;
+      bg.src = first.avatar;
+      link.href = new URL(first.link).origin;
+      link.textContent = author;
+    }
+
+    posts.innerHTML = mine
+      .slice(0, 5)
+      .map(a => {
+        const onErr = `onerror="this.style.display='none'"`;
+        return (
+          `<a class="fc-modal-post" href="${esc(a.link)}" target="_blank" rel="noopener">
+             <span>${esc(a.title)}</span>
+             <time>${esc(a.created)}</time>
+           </a>`
+        );
+      })
+      .join("");
+    modal.classList.add("fc-modal-open");
+  }
+
+  function bindEvents() {
+    gridEl.addEventListener("click", e => {
+      const author = (e.target as HTMLElement).closest?.("[data-author]");
+      if (author) {
+        e.preventDefault();
+        openModal(author.getAttribute("data-author") || "");
+      }
+    });
+    $("[data-fc-random-btn]")?.addEventListener("click", renderRandom);
+    moreEl.addEventListener("click", renderMore);
+  }
+
+  function bindCardGlow() {
+    gridEl.addEventListener("pointermove", e => {
+      const card = (e.target as HTMLElement).closest?.(".fc-card") as HTMLElement | null;
+      if (!card) return;
+      const rect = card.getBoundingClientRect();
+      card.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
+      card.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
+    });
+  }
+
+  function bindModal() {
+    const modal = document.querySelector("[data-fc-modal]") as HTMLElement;
+    modal.addEventListener("click", e => {
+      if (e.target === modal) modal.classList.remove("fc-modal-open");
+    });
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape") modal.classList.remove("fc-modal-open");
+    });
+  }
+
+  async function fetchData(): Promise<any> {
+    const res = await fetch(API);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!Array.isArray(data?.article_data) || !data.article_data.length)
+      throw new Error("empty");
+    return data;
+  }
+
+  function applyData(data: any, { silent = false } = {}) {
+    allArticles = (data.article_data || []).slice();
+    renderStats(data.statistical_data || {});
+    if (!silent || !randomEl.hidden) renderRandom();
+    shownCount = Math.min(PAGE_SIZE, allArticles.length);
+    renderGrid();
+    if (!silent) {
+      loadingEl.remove();
+      bindEvents();
+      bindCardGlow();
+      bindModal();
+    }
+  }
+
+  function showError() {
+    loadingEl.outerHTML =
+      `<div class="fc-error">
+         <span>友圈加载失败，请稍后重试</span>
+         <button type="button" onclick="location.reload()">刷新</button>
+       </div>`;
+  }
+
+  async function load() {
+    // 1) 若有构建时内联数据：立即渲染，零等待
+    const pre = document.getElementById("fc-preload");
+    let hasPreload = false;
+    if (pre) {
+      try {
+        applyData(JSON.parse(pre.textContent || "null"));
+        hasPreload = true;
+      } catch {
+        /* 内联数据损坏则走网络 */
+      }
+    }
+
+    // 2) 后台静默拉取最新数据（有预取时刷新；无预取时即首屏拉取）
+    try {
+      const data = await fetchData();
+      if (hasPreload) {
+        // 对比是否变化，避免无意义重绘
+        const key = JSON.stringify(data.article_data?.slice(0, 3));
+        const oldKey = JSON.stringify(allArticles.slice(0, 3));
+        if (key !== oldKey) applyData(data, { silent: true });
+      } else {
+        applyData(data);
+      }
+    } catch {
+      if (!hasPreload) showError();
+      // 有预取时静默失败：保留内联数据
+    }
+  }
+
+  load();
+</script>

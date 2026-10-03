@@ -1,0 +1,90 @@
+{
+  "title": "Person Life",
+  "subtitle": "十二张实况照片，拆开封面与视频",
+  "images": [
+    {
+      "alt": "实况照片 1",
+      "width": 1920,
+      "height": 824,
+      "cover": "https://cdn.mingcy.cn/1000015643-cover.jpg",
+      "video": "https://cdn.mingcy.cn/1000015643-video.mp4"
+    },
+    {
+      "alt": "实况照片 2",
+      "width": 2558,
+      "height": 1098,
+      "cover": "https://cdn.mingcy.cn/1000015644-cover.jpg",
+      "video": "https://cdn.mingcy.cn/1000015644-video.mp4"
+    },
+    {
+      "alt": "实况照片 3",
+      "width": 2558,
+      "height": 1098,
+      "cover": "https://cdn.mingcy.cn/1000015645-cover.jpg",
+      "video": "https://cdn.mingcy.cn/1000015645-video.mp4"
+    },
+    {
+      "alt": "实况照片 4",
+      "width": 2558,
+      "height": 1098,
+      "cover": "https://cdn.mingcy.cn/1000015646-cover.jpg",
+      "video": "https://cdn.mingcy.cn/1000015646-video.mp4"
+    },
+    {
+      "alt": "实况照片 5",
+      "width": 1920,
+      "height": 824,
+      "cover": "https://cdn.mingcy.cn/1000015647-cover.jpg",
+      "video": "https://cdn.mingcy.cn/1000015647-video.mp4"
+    },
+    {
+      "alt": "实况照片 6",
+      "width": 2558,
+      "height": 1098,
+      "cover": "https://cdn.mingcy.cn/1000015648-cover.jpg",
+      "video": "https://cdn.mingcy.cn/1000015648-video.mp4"
+    },
+    {
+      "alt": "实况照片 7",
+      "width": 2558,
+      "height": 1098,
+      "cover": "https://cdn.mingcy.cn/1000015649-cover.jpg",
+      "video": "https://cdn.mingcy.cn/1000015649-video.mp4"
+    },
+    {
+      "alt": "实况照片 8",
+      "width": 2558,
+      "height": 1098,
+      "cover": "https://cdn.mingcy.cn/1000015650-cover.jpg",
+      "video": "https://cdn.mingcy.cn/1000015650-video.mp4"
+    },
+    {
+      "alt": "实况照片 9",
+      "width": 2558,
+      "height": 1098,
+      "cover": "https://cdn.mingcy.cn/1000015651-cover.jpg",
+      "video": "https://cdn.mingcy.cn/1000015651-video.mp4"
+    },
+    {
+      "alt": "实况照片 10",
+      "width": 1648,
+      "height": 3840,
+      "cover": "https://cdn.mingcy.cn/1000015652-cover.jpg",
+      "video": "https://cdn.mingcy.cn/1000015652-video.mp4"
+    },
+    {
+      "alt": "实况照片 11",
+      "width": 2558,
+      "height": 1098,
+      "cover": "https://cdn.mingcy.cn/1000015653-cover.jpg",
+      "video": "https://cdn.mingcy.cn/1000015653-video.mp4"
+    },
+    {
+      "alt": "实况照片 12",
+      "width": 1200,
+      "height": 2608,
+      "cover": "https://cdn.mingcy.cn/1000015654-cover.jpg",
+      "video": "https://cdn.mingcy.cn/1000015654-video.mp4"
+    }
+  ]
+}

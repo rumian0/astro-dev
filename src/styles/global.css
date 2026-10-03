@@ -3,25 +3,27 @@
 
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
+/* 默认强调色（SSR 首屏稳定值）；AccentColorInjector 每页随机覆盖 --accent/--background/--foreground/--muted/--border */
 :root,
 html[data-theme="light"] {
   --background: #f2f5ec;
-  --foreground: #353538;
-  --accent: #1158d1;
+  --foreground: #33373a;
+  --accent: #f55555;
   --muted: #bbc789;
-  --border: #7cadff;
+  --border: #d5dcc6;
 }
 
 html[data-theme="dark"] {
   --background: #10131a;
   --foreground: #f6f7f8;
-  --accent: #008fec;
+  --accent: #325ea3;
   --muted: #212f3f;
-  --border: #2264e3;
+  --border: #2e3b59;
 }
 
 @theme inline {
-  --font-app: var(--font-wotfard);
+  /* 中文优先：英文用 Wotfard，中文字形依次回落到系统字体（苹方/雅黑/Noto SC） */
+  --font-app: var(--font-wotfard), "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
   --font-sriracha: var(--font-sriracha);
   --font-firacode: var(--font-firacode);
   --color-background: var(--background);
@@ -53,7 +55,9 @@ i {
     @apply overflow-y-scroll scroll-smooth;
   }
   body {
-    @apply flex min-h-svh flex-col bg-background font-app text-foreground selection:bg-accent/75 selection:text-background;
+    /* 透明底：让 Layout 的全局模糊背景图透出 */
+    @apply flex min-h-svh flex-col font-app text-foreground selection:bg-accent/75 selection:text-background;
+    background-color: transparent;
   }
   a,
   button {
@@ -62,6 +66,19 @@ i {
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
+  }
+  /* 正文可读性：主内容区叠一层半透明玻璃，避免背景图干扰阅读 */
+  main#main-content {
+    position: relative;
+    z-index: 10;
+  }
+  /* 长文/列表区块：跳过屏外渲染，提升滚动流畅度 */
+  #featured,
+  #recent-posts,
+  #archives-list,
+  .content-visibility-auto {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 480px;
   }
 }
 

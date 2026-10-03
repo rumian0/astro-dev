@@ -11,6 +11,26 @@ import IconGallery from "@/assets/icons/IconGallery.svg";
 import { slugifyStr } from "@/utils/slugify";
 import { SITE } from "@/config";
 
+// Remote live-photo manifest: { cover, video } (split mode) or
+// { src, live:"motion" } (Google Motion Photo, mp4 embedded in jpg).
+// Kept under src/data/gallery-manifests/ so the galleries content
+// collection doesn't pick the JSON up as a data entry.
+type RemoteImage =
+  | { alt: string; width: number; height: number; cover: string; video: string }
+  | { alt: string; width: number; height: number; src: string; live: "motion" };
+type RemoteManifest = { images: RemoteImage[] };
+
+type LiveImage = {
+  src: string;
+  alt: string;
+  width: number;
+  height: number;
+  live: true;
+  cover?: string;
+  video?: string;
+  motion?: string;
+};
+
 export async function getStaticPaths() {
   if (!SITE.showGalleries) return [];
 
@@ -29,26 +49,69 @@ const { entry } = Astro.props;
 const { gallery: slug } = Astro.params;
 const { title, description, pubDatetime, coverImage, tags } = entry.data;
 
-// Load all gallery images at build-time with a static glob
+// Static gallery images (Astro Assets pipeline)
 const allImages = import.meta.glob<{ default: ImageMetadata }>(
   "/src/data/galleries/**/*.{jpg,jpeg,png,webp,avif,gif,JPG,JPEG,PNG,WEBP}",
   { eager: true }
 );
 
-type GalleryImage = { src: ImageMetadata; alt: string; filename: string };
+// Remote live-photo manifests
+const manifests = import.meta.glob("/src/data/gallery-manifests/*.json", {
+  eager: true,
+}) as Record<string, RemoteManifest | { default: RemoteManifest }>;
+
+type StaticImg = { src: ImageMetadata; alt: string; filename: string };
 
 function filenameToAlt(filename: string): string {
   return (
     filename
-      .replace(/\.[^.]+$/, "") // remove extension
-      .replace(/^\d+[-_]?/, "") // remove initial number
-      .replace(/[-_]/g, " ") // dashes/underscores → spaces
-      .replace(/\b\w/g, c => c.toUpperCase()) // capitalize
+      .replace(/\.[^.]+$/, "")
+      .replace(/^\d+[-_]?/, "")
+      .replace(/[-_]/g, " ")
+      .replace(/\b\w/g, c => c.toUpperCase())
       .trim() || title
   );
 }
 
-const images: GalleryImage[] = Object.entries(allImages)
+// Match the manifest case-insensitively: Astro may lowercase the slug param,
+// while the manifest filename keeps its original casing (e.g. Love-eyes.json).
+const manifestMod = (() => {
+  const target = String(slug).toLowerCase();
+  const hit = Object.entries(manifests).find(([k]) =>
+    k.split("/").pop()!.replace(/\.json$/i, "").toLowerCase() === target
+  );
+  return hit ? hit[1] : undefined;
+})();
+const liveImages: LiveImage[] = (() => {
+  if (!manifestMod) return [];
+  const m = "default" in manifestMod ? manifestMod.default : manifestMod;
+  return m.images.map(img => {
+    const alt = img.alt || title;
+    if ("cover" in img) {
+      return {
+        src: img.cover,
+        alt,
+        width: img.width,
+        height: img.height,
+        live: true,
+        cover: img.cover,
+        video: img.video,
+      };
+    }
+    return {
+      src: img.src,
+      alt,
+      width: img.width,
+      height: img.height,
+      live: true,
+      motion: img.src,
+    };
+  });
+})();
+
+const isLive = liveImages.length > 0;
+
+const staticImages: StaticImg[] = Object.entries(allImages)
   .filter(
     ([path]) =>
       path.startsWith(`/src/data/galleries/${slug}/`) && !path.includes("index")
@@ -59,18 +122,23 @@ const images: GalleryImage[] = Object.entries(allImages)
     return { src: mod.default, alt: filenameToAlt(filename), filename };
   });
 
-// If the frontmatter has coverImage, include it at the beginning if it is not already in the list
+const images = isLive ? liveImages : staticImages;
+const photoCount = images.length;
+
+// If the frontmatter has coverImage, include it at the beginning if not in list
 const hasCoverInFolder = coverImage
-  ? images.some(img => img.src.src === coverImage.src)
+  ? staticImages.some(img => img.src.src === coverImage.src)
   : false;
 
 const coverImageSrc = coverImage
   ? new URL(coverImage.src, Astro.url.origin).href
   : images.length > 0
-    ? new URL(images[0].src.src, Astro.url.origin).href
+    ? isLive
+      ? new URL(liveImages[0].src, Astro.url.origin).href
+      : new URL(staticImages[0].src.src, Astro.url.origin).href
     : undefined;
 
-// Build Schema.org ImageGallery Structured Data
+// Schema.org ImageGallery
 const gallerySchema = {
   "@context": "https://schema.org",
   "@type": "ImageGallery",
@@ -83,7 +151,7 @@ const gallerySchema = {
     name: SITE.author,
     ...(SITE.profile && { url: SITE.profile }),
   },
-  numberOfItems: images.length,
+  numberOfItems: photoCount,
 };
 ---
 
@@ -105,14 +173,14 @@ const gallerySchema = {
           <div class="mb-5 inline-flex items-center gap-2 text-accent">
             <IconGallery class="size-5" />
             <span class="font-firacode text-xs font-bold tracking-[0.2em] uppercase opacity-90">
-              Collection // {images.length} {images.length === 1 ? "photo" : "photos"}
+              Collection // {photoCount} {photoCount === 1 ? "photo" : "photos"}
             </span>
           </div>
-          
+
           <h1 class="text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-5xl xl:text-6xl text-foreground" style={{ viewTransitionName: slugifyStr(String(title).replaceAll(".", "-")) }}>
             {title}
           </h1>
-          
+
           {description && (
             <p class="mt-6 text-lg sm:text-xl leading-relaxed text-foreground/60">{description}</p>
           )}
@@ -128,7 +196,7 @@ const gallerySchema = {
             </svg>
             <Datetime pubDatetime={pubDatetime} class="[&>svg]:hidden mb-0" />
           </div>
-          
+
           {tags.length > 0 && (
             <div class="flex flex-wrap gap-x-4 gap-y-2 text-sm md:justify-end mt-2 md:mt-0">
               {tags.map(tag => (
@@ -146,9 +214,9 @@ const gallerySchema = {
       </div>
     </header>
 
-    <!-- Large cover (if defined in frontmatter and not in the folder) -->
+    <!-- Large cover (static galleries only, if defined and not in folder) -->
     {
-      coverImage && !hasCoverInFolder && (
+      !isLive && coverImage && !hasCoverInFolder && (
         <div class="mb-8 overflow-hidden rounded-2xl">
           <Image
             src={coverImage}
@@ -162,16 +230,47 @@ const gallerySchema = {
       )
     }
 
-    <!-- Image grid -->
+    {/* ── Live gallery: CSS-column waterfall + Fancybox lightbox ── */}
     {
-      images.length > 0 ? (
+      isLive ? (
+        <div class="gallery-waterfall" id="gallery-waterfall">
+          {liveImages.map(img => (
+            <a
+              href={img.src}
+              class="gallery-live-item gallery-live"
+              data-fancybox="gallery"
+              data-caption={img.alt}
+              data-motion={img.motion}
+              data-cover={img.cover}
+              data-video={img.video}
+              aria-label={`View image: ${img.alt}`}
+            >
+              <img
+                src={img.src}
+                alt={img.alt}
+                width={img.width}
+                height={img.height}
+                class="gallery-img"
+                data-live-motion={img.motion}
+                data-live-video={img.video}
+                loading="lazy"
+                decoding="async"
+              />
+              <div class="gallery-overlay">
+                <span class="gallery-alt">{img.alt}</span>
+              </div>
+            </a>
+          ))}
+        </div>
+      ) : images.length > 0 ? (
+        /* ── Static gallery: grid + built-in <dialog> lightbox ── */
         <ul
           class="gallery-grid mt-6"
           id="gallery-grid"
           role="list"
           aria-label={`Images of ${title}`}
         >
-          {images.map((img, idx) => (
+          {staticImages.map((img, idx) => (
             <li>
               <button
                 class="gallery-item group"
@@ -204,35 +303,41 @@ const gallerySchema = {
   <Footer />
 </Layout>
 
-<!-- Lightbox dialog -->
-<dialog id="lightbox" class="lightbox" aria-label="Image viewer" aria-modal="true">
-  <div class="lightbox-layout">
-    <div class="lightbox-topbar">
-      <span id="lightbox-counter" class="lightbox-counter font-firacode"></span>
-      <button class="lightbox-btn" id="lightbox-close" aria-label="Close" title="Close (Esc)" type="button">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-      </button>
-    </div>
+<!-- Built-in lightbox dialog (static galleries only) -->
+{
+  !isLive && (
+    <dialog id="lightbox" class="lightbox" aria-label="Image viewer" aria-modal="true">
+      <div class="lightbox-layout">
+        <div class="lightbox-topbar">
+          <span id="lightbox-counter" class="lightbox-counter font-firacode"></span>
+          <button class="lightbox-btn" id="lightbox-close" aria-label="Close" title="Close (Esc)" type="button">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
 
-    <div class="lightbox-main">
-      <button class="lightbox-btn lightbox-nav" id="lightbox-prev" aria-label="Previous" title="Previous (Left Arrow)" type="button">
-        <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-      </button>
-      
-      <div class="lightbox-figure">
-        <img id="lightbox-img" src="" alt="" class="lightbox-image" />
-        <p id="lightbox-caption" class="lightbox-caption text-foreground/80"></p>
+        <div class="lightbox-main">
+          <button class="lightbox-btn lightbox-nav" id="lightbox-prev" aria-label="Previous" title="Previous (Left Arrow)" type="button">
+            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+
+          <div class="lightbox-figure">
+            <img id="lightbox-img" src="" alt="" class="lightbox-image" />
+            <p id="lightbox-caption" class="lightbox-caption text-foreground/80"></p>
+          </div>
+
+          <button class="lightbox-btn lightbox-nav" id="lightbox-next" aria-label="Next" title="Next (Right Arrow)" type="button">
+            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+        </div>
       </div>
-
-      <button class="lightbox-btn lightbox-nav" id="lightbox-next" aria-label="Next" title="Next (Right Arrow)" type="button">
-        <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-      </button>
-    </div>
-  </div>
-</dialog>
+    </dialog>
+  )
+}
 
 <script>
-  // Build image array from DOM
+  // Built-in lightbox for STATIC galleries only. Lives on #gallery-grid;
+  // live galleries use Fancybox (driven by src/scripts/live-gallery.ts) and
+  // render no #gallery-grid, so this no-ops there.
   function initGallery() {
     const grid = document.getElementById("gallery-grid");
     const lightbox = document.getElementById(
@@ -240,7 +345,6 @@ const gallerySchema = {
     ) as HTMLDialogElement | null;
     if (!grid || !lightbox) return;
 
-    // From here TypeScript does not carry narrowing to closures; we use the local variable
     const lb = lightbox;
 
     const items = Array.from(
@@ -270,7 +374,7 @@ const gallerySchema = {
       lightboxImg.alt = img.alt;
       lightboxCaption.textContent = img.alt;
       lightboxCounter.textContent = `${current + 1} / ${items.length}`;
-      
+
       if (prevBtn) prevBtn.style.visibility = current === 0 ? "hidden" : "visible";
       if (nextBtn) nextBtn.style.visibility = current === items.length - 1 ? "hidden" : "visible";
 
@@ -293,7 +397,6 @@ const gallerySchema = {
 
     lightbox.addEventListener("click", e => {
       const target = e.target as HTMLElement;
-      // Close if click is outside the image, buttons and text
       if (!target.closest("img, button, .lightbox-caption, .lightbox-counter")) {
         close();
       }
@@ -307,13 +410,61 @@ const gallerySchema = {
     });
   }
 
-  // Initialize on first load and SPA navigations (View Transitions)
   initGallery();
   document.addEventListener("astro:after-swap", initGallery);
 </script>
 
 <style>
-  /* ── Image grid ── */
+  /* ── Live gallery: CSS-column waterfall ── */
+  .gallery-waterfall {
+    column-count: 3;
+    column-gap: 1rem;
+    padding: 0;
+    margin: 0;
+  }
+  @media (max-width: 768px) { .gallery-waterfall { column-count: 2; } }
+  @media (max-width: 480px) { .gallery-waterfall { column-count: 1; } }
+
+  .gallery-live-item {
+    position: relative;
+    display: block;
+    width: 100%;
+    margin: 0 0 1rem;
+    padding: 0;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    cursor: zoom-in;
+    background: color-mix(in srgb, var(--foreground) 5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 25%, transparent);
+    transition: border-color 0.2s, box-shadow 0.2s;
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .gallery-live-item:hover {
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    box-shadow: 0 4px 24px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  /* live item loading shimmer (until Heo unpacks the cover) */
+  .gallery-live-item.gallery-live {
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--foreground) 8%, transparent) 25%,
+      color-mix(in srgb, var(--foreground) 16%, transparent) 37%,
+      color-mix(in srgb, var(--foreground) 8%, transparent) 63%
+    );
+    background-size: 400% 100%;
+    animation: gallery-shimmer 1.8s ease infinite;
+  }
+  @keyframes gallery-shimmer {
+    0% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .gallery-live-item.gallery-live { animation: none; }
+  }
+
+  /* ── Static gallery: grid (unchanged from original) ── */
   .gallery-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -322,20 +473,12 @@ const gallerySchema = {
     padding: 0;
     margin: 0;
   }
-
   @media (min-width: 640px) {
-    .gallery-grid {
-      grid-template-columns: repeat(3, 1fr);
-      gap: 1rem;
-    }
+    .gallery-grid { grid-template-columns: repeat(3, 1fr); gap: 1rem; }
   }
-
   @media (min-width: 1024px) {
-    .gallery-grid {
-      grid-template-columns: repeat(4, 1fr);
-    }
+    .gallery-grid { grid-template-columns: repeat(4, 1fr); }
   }
-
   .gallery-item {
     position: relative;
     display: block;
@@ -346,12 +489,9 @@ const gallerySchema = {
     cursor: zoom-in;
     background: color-mix(in srgb, var(--foreground) 5%, transparent);
     border: 1px solid color-mix(in srgb, var(--border) 25%, transparent);
-    transition:
-      border-color 0.2s,
-      box-shadow 0.2s;
+    transition: border-color 0.2s, box-shadow 0.2s;
     padding: 0;
   }
-
   .gallery-item:hover {
     border-color: color-mix(in srgb, var(--accent) 40%, transparent);
     box-shadow: 0 4px 24px color-mix(in srgb, var(--accent) 12%, transparent);
@@ -359,16 +499,16 @@ const gallerySchema = {
 
   .gallery-img {
     width: 100%;
-    height: 100%;
+    height: auto;
     object-fit: cover;
     transition: transform 0.4s ease;
     display: block;
   }
+  .gallery-live-item .gallery-img { height: auto; object-fit: contain; }
+  .gallery-item .gallery-img { height: 100%; }
+  .gallery-item:hover .gallery-img { transform: scale(1.05); }
 
-  .gallery-item:hover .gallery-img {
-    transform: scale(1.05);
-  }
-
+  .gallery-overlay,
   .gallery-item-overlay {
     position: absolute;
     inset: 0;
@@ -383,12 +523,10 @@ const gallerySchema = {
     opacity: 0;
     transition: opacity 0.3s;
   }
-
+  .gallery-live-item:hover .gallery-overlay,
   .gallery-item:hover .gallery-item-overlay,
-  .gallery-item:focus-visible .gallery-item-overlay {
-    opacity: 1;
-  }
-
+  .gallery-item:focus-visible .gallery-item-overlay { opacity: 1; }
+  .gallery-alt,
   .gallery-item-alt {
     font-size: 0.75rem;
     color: white;
@@ -396,7 +534,7 @@ const gallerySchema = {
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
   }
 
-  /* ── Lightbox ── */
+  /* ── Built-in lightbox (static galleries) ── */
   .lightbox {
     position: fixed;
     inset: 0;
@@ -414,27 +552,10 @@ const gallerySchema = {
     transition: opacity 0.3s ease;
     display: flex;
   }
-
-  .lightbox[open] {
-    opacity: 1;
-  }
-
-  /* Polyfill prevent close animation flash */
-  .lightbox::backdrop {
-    background: transparent;
-  }
-
-  .lightbox:not([open]) {
-    display: none;
-  }
-
-  .lightbox-layout {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
-
+  .lightbox[open] { opacity: 1; }
+  .lightbox::backdrop { background: transparent; }
+  .lightbox:not([open]) { display: none; }
+  .lightbox-layout { width: 100%; height: 100%; display: flex; flex-direction: column; }
   .lightbox-topbar {
     display: flex;
     justify-content: space-between;
@@ -442,23 +563,20 @@ const gallerySchema = {
     padding: 1.25rem 1.5rem;
     flex-shrink: 0;
   }
-
   .lightbox-counter {
     font-size: 0.875rem;
     letter-spacing: 0.1em;
     color: color-mix(in srgb, var(--foreground) 50%, transparent);
   }
-
   .lightbox-main {
     flex: 1;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0 1rem 1.5rem;
-    min-height: 0; /* Important for flex image container */
+    min-height: 0;
     gap: 1.5rem;
   }
-
   .lightbox-figure {
     flex: 1;
     display: flex;
@@ -469,7 +587,6 @@ const gallerySchema = {
     height: 100%;
     gap: 1.25rem;
   }
-
   .lightbox-image {
     max-width: 100%;
     max-height: calc(100dvh - 10rem);
@@ -477,11 +594,9 @@ const gallerySchema = {
     height: auto;
     object-fit: contain;
     border-radius: 6px;
-    /* Performance hint for large images */
     will-change: transform;
-    transform: translateZ(0); 
+    transform: translateZ(0);
   }
-
   .lightbox-caption {
     font-size: 0.95rem;
     color: color-mix(in srgb, var(--foreground) 80%, transparent);
@@ -491,7 +606,6 @@ const gallerySchema = {
     margin: 0;
     font-weight: 300;
   }
-
   .lightbox-btn {
     background: color-mix(in srgb, var(--foreground) 3%, transparent);
     border: 1px solid color-mix(in srgb, var(--border) 15%, transparent);
@@ -506,7 +620,6 @@ const gallerySchema = {
     backdrop-filter: blur(4px);
     box-shadow: 0 4px 12px color-mix(in srgb, var(--background) 50%, transparent);
   }
-
   .lightbox-btn:hover {
     background: color-mix(in srgb, var(--accent) 10%, transparent);
     border-color: color-mix(in srgb, var(--accent) 40%, transparent);
@@ -514,34 +627,103 @@ const gallerySchema = {
     transform: scale(1.05) translateY(-2px);
     box-shadow: 0 8px 24px -4px color-mix(in srgb, var(--accent) 25%, transparent);
   }
-
-  .lightbox-nav {
-    flex-shrink: 0;
-  }
-
+  .lightbox-nav { flex-shrink: 0; }
   @media (max-width: 640px) {
-    .lightbox-main {
-      padding: 0 0 1rem 0;
-      gap: 0;
-      position: relative;
-    }
-    .lightbox-nav {
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      padding: 1rem 0.5rem;
-    }
-    .lightbox-nav:hover {
-      transform: translateY(-50%) scale(1.1);
-    }
-    #lightbox-prev {
-      left: 0;
-    }
-    #lightbox-next {
-      right: 0;
-    }
-    .lightbox-image {
-      max-height: calc(100dvh - 8rem);
-    }
+    .lightbox-main { padding: 0 0 1rem 0; gap: 0; position: relative; }
+    .lightbox-nav { position: absolute; top: 50%; transform: translateY(-50%); padding: 1rem 0.5rem; }
+    .lightbox-nav:hover { transform: translateY(-50%) scale(1.1); }
+    #lightbox-prev { left: 0; }
+    #lightbox-next { right: 0; }
+    .lightbox-image { max-height: calc(100dvh - 8rem); }
+  }
+</style>
+
+<!-- Live lightbox player styles (global: Fancybox & HeoLivePhoto DOM have no
+     scoped astro-cid attribute). Overrides plugin/Fancybox inline styles. -->
+<style is:global>
+  /* HeoLivePhoto wraps the live img in an anonymous <span>; force block/full-width */
+  .gallery-live-item > span {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    line-height: 0;
+  }
+  .gallery-live-item .gallery-img {
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+    object-fit: contain !important;
+    transition: transform 0.4s ease, opacity 0.3s ease !important;
+  }
+  .gallery-live-item .gallery-overlay { z-index: 3; }
+
+  /* Fancybox lightbox live player (injected at Carousel.contentReady) */
+  .lp-player {
+    position: relative;
+    display: block;
+    margin: 0 auto;
+    line-height: 0;
+    background: #000;
+    min-width: 220px;
+    min-height: 140px;
+  }
+  .lp-cover {
+    display: block;
+    max-width: min(92vw, 1280px);
+    max-height: min(86vh, 980px);
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    margin: 0;
+    border: 0;
+    animation: lp-kenburns 8s ease-out forwards;
+    transform-origin: center center;
+  }
+  @keyframes lp-kenburns {
+    0% { transform: scale(1.02); }
+    100% { transform: scale(1.12); }
+  }
+  .lp-video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    margin: 0;
+    border: 0;
+    background: #000;
+    opacity: 1;
+    transition: opacity 0.25s ease;
+  }
+  .lp-video.is-waiting { opacity: 0; }
+  .lp-spin {
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 34px; height: 34px;
+    margin: -17px 0 0 -17px;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.28);
+    border-top-color: #fff;
+    animation: lp-spin 0.8s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes lp-spin { to { transform: rotate(360deg); } }
+  .lp-caption {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    margin: 0;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    color: #fff;
+    background: linear-gradient(to top, rgba(0,0,0,0.6), rgba(0,0,0,0));
+    pointer-events: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .lp-cover { animation: none; }
+    .lp-video { transition: none; }
+    .lp-spin { animation-duration: 1.6s; }
   }
 </style>
